@@ -1,11 +1,8 @@
 # app.py
 import os
-import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 import paramiko
-import requests
-import time
 from threading import Thread
 from queue import Queue
 from flask import Flask, render_template_string, request, Response
@@ -13,14 +10,13 @@ from flask import Flask, render_template_string, request, Response
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
 
-WORKDIR = Path(tempfile.gettempdir()) / "tenable_agent_deployer"
-WORKDIR.mkdir(parents=True, exist_ok=True)
-
-DEB_URL = "https://downloads.nessus.org/nessus3dl.php?file=nessus-agent-latest-debian.deb&licence_accept=yes&t=linux"
-RPM_URL = "https://downloads.nessus.org/nessus3dl.php?file=nessus-agent-latest-rhel.rpm&licence_accept=yes&t=linux"
-
-DEB_PATH = WORKDIR / "nessus-agent-latest.deb"
-RPM_PATH = WORKDIR / "nessus-agent-latest.rpm"
+# --- Local package paths ---
+LOCAL_PACKAGES = {
+    "ubuntu1604": Path("/path/to/NessusAgent-10.9.0-ubuntu1604_amd64.deb"),
+    "el7": Path("/path/to/NessusAgent-10.9.0-el7.x86_64.rpm"),
+    "el8": Path("/path/to/NessusAgent-10.9.0-el8.aarch64.rpm"),
+    "el9": Path("/path/to/NessusAgent-10.9.0-el9.aarch64.rpm")
+}
 
 # --- HTML Template ---
 TEMPLATE = r"""
@@ -132,38 +128,43 @@ if(modeCloud && modeMgr){ modeCloud.addEventListener('change', toggleFields); mo
 </html>
 """
 
-# Global queue for SSE logs
+# --- Live log queue ---
 log_queue = Queue()
 
-# --- Helper functions ---
-def parse_hosts(text: str) -> List[str]:
+def log(message: str):
+    print(message)
+    log_queue.put(message)
+
+def parse_hosts(text: str):
     return [h.strip() for h in text.splitlines() if h.strip()]
 
-def download_package():
-    headers = {"User-Agent": "Mozilla/5.0"}
-    for url, path in [(DEB_URL, DEB_PATH), (RPM_URL, RPM_PATH)]:
-        if not path.exists() or path.stat().st_size == 0:
-            r = requests.get(url, headers=headers, stream=True, allow_redirects=True)
-            r.raise_for_status()
-            with open(path, 'wb') as f:
-                for chunk in r.iter_content(1024):
-                    f.write(chunk)
-            if path.stat().st_size == 0:
-                raise RuntimeError(f"Downloaded file {path} is empty!")
-
-def mask_password(text: str, password: str) -> str:
+def mask_password(text: str, password: str):
     if not password:
         return text
     return text.replace(password, "***")
 
-def log(line: str):
-    print(line)
-    log_queue.put(line)
+def select_local_package(os_type: str, release: str) -> Path:
+    if os_type == "debian":
+        if release.startswith("16.04"):
+            return LOCAL_PACKAGES["ubuntu1604"]
+        else:
+            raise RuntimeError(f"Unsupported Debian/Ubuntu version: {release}")
+    elif os_type == "rhel":
+        if release.startswith("7"):
+            return LOCAL_PACKAGES["el7"]
+        elif release.startswith("8"):
+            return LOCAL_PACKAGES["el8"]
+        elif release.startswith("9"):
+            return LOCAL_PACKAGES["el9"]
+        else:
+            raise RuntimeError(f"Unsupported RHEL version: {release}")
+    else:
+        raise RuntimeError(f"Unsupported OS type: {os_type}")
 
+# --- Deployment logic ---
 def deploy_to_host(host: str, username: str, password: str, sudo_password: Optional[str],
                    key: str, mode: str, mgr_host: Optional[str], mgr_port: Optional[str],
                    groups: str, force_relink: bool):
-
     try:
         log(f"[{host}] Connecting...")
         ssh = paramiko.SSHClient()
@@ -172,23 +173,34 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         log(f"[{host}] Connected!")
         sudo_pw = sudo_password or password
 
-        # Detect OS
+        # Detect OS and version
         stdin, stdout, _ = ssh.exec_command(
-            "test -f /etc/debian_version && echo deb || test -f /etc/redhat-release && echo rhel")
-        os_type = stdout.read().decode().strip()
-        log(f"[{host}] Detected OS: {os_type}")
+            "if [ -f /etc/debian_version ]; then lsb_release -a 2>/dev/null || cat /etc/lsb-release; "
+            "elif [ -f /etc/redhat-release ]; then cat /etc/redhat-release; fi"
+        )
+        os_info = stdout.read().decode().strip()
+        log(f"[{host}] OS info: {os_info}")
 
-        download_package()
-        remote_path = "/tmp/nessus-agent.deb" if os_type=='deb' else "/tmp/nessus-agent.rpm"
-        local_path = DEB_PATH if os_type=='deb' else RPM_PATH
+        if "Ubuntu" in os_info or "Debian" in os_info:
+            os_type = "debian"
+            release = "16.04"
+        elif "release" in os_info:
+            os_type = "rhel"
+            release = os_info.split()[2]
+        else:
+            raise RuntimeError(f"Cannot determine OS from: {os_info}")
 
+        local_pkg = select_local_package(os_type, release)
+        remote_path = f"/tmp/{local_pkg.name}"
+
+        # Upload local package
         sftp = ssh.open_sftp()
-        log(f"[{host}] Uploading {local_path.name}...")
-        sftp.put(str(local_path), remote_path)
+        log(f"[{host}] Uploading {local_pkg.name}...")
+        sftp.put(str(local_pkg), remote_path)
         sftp.close()
 
         # Install package
-        if os_type == 'deb':
+        if os_type == "debian":
             cmd = f"sudo dpkg -i {remote_path} || sudo apt-get -f install -y"
         else:
             cmd = f"sudo rpm -ivh {remote_path} || sudo yum localinstall -y {remote_path} || sudo dnf install -y {remote_path}"
@@ -259,7 +271,6 @@ def deploy():
     groups = request.form.get("groups", "")
     force_relink = request.form.get("force_relink") == "1"
 
-    # Start background deployment
     def run_deploy():
         for host in hosts:
             deploy_to_host(host, username, password, sudo_password, key, mode, mgr_host, mgr_port, groups, force_relink)

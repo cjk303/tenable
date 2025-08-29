@@ -109,8 +109,21 @@ pre { white-space: pre-wrap; }
 <h6>{{ host }} - {% if data.success %}<span class="badge bg-success">SUCCESS</span>{% else %}<span class="badge bg-danger">FAILURE</span>{% endif %}</h6>
 <pre>{{ data.log }}</pre>
 {% endfor %}
+</div>
+{% endif %}
+</div>
+<script>
+const modeCloud = document.getElementById('modeCloud');
+const modeMgr = document.getElementById('modeMgr');
+const mgrFields = document.getElementById('mgrFields');
+function toggleFields() { mgrFields.style.display = modeMgr.checked ? 'block' : 'none'; }
+if(modeCloud && modeMgr){ modeCloud.addEventListener('change', toggleFields); modeMgr.addEventListener('change', toggleFields); toggleFields(); }
+</script>
+</body>
+</html>
 """
 
+# --- Helpers ---
 def parse_hosts(text: str) -> List[str]:
     return [h.strip() for h in text.splitlines() if h.strip()]
 
@@ -142,7 +155,8 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
 
         if not installed:
             add("Agent not found. Detecting OS...")
-            stdin, stdout, _ = ssh.exec_command("test -f /etc/debian_version && echo deb || test -f /etc/redhat-release && echo rhel")
+            stdin, stdout, _ = ssh.exec_command(
+                "test -f /etc/debian_version && echo deb || test -f /etc/redhat-release && echo rhel")
             os_type = stdout.read().decode().strip()
             download_package()
             if os_type == 'deb':
@@ -177,7 +191,7 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
             stdin.write(sudo_pw + "\n"); stdin.flush()
             add(stdout.read().decode()); add(stderr.read().decode())
 
-        # Check if already linked
+        # Linking
         stdin, stdout, _ = ssh.exec_command("/opt/nessus_agent/sbin/nessuscli agent status")
         status_out = stdout.read().decode().lower()
         already_linked = "linked" in status_out
@@ -201,8 +215,6 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
             stdin, stdout, stderr = ssh.exec_command(f"sudo -S {cmd}", get_pty=True)
             stdin.write(sudo_pw + "\n"); stdin.flush()
             add(stdout.read().decode()); add(stderr.read().decode())
-            if "success" not in stdout.read().decode().lower():
-                success = False
 
     except Exception as e:
         add(f"FAILED: {e}")
@@ -211,7 +223,6 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         success = False
     finally:
         ssh.close()
-
     return success, "\n".join(log)
 
 

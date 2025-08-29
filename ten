@@ -1,27 +1,31 @@
 # app.py
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 import paramiko
 from threading import Thread
 from queue import Queue
 from flask import Flask, render_template_string, request, Response
 
+BASE_DIR = Path(__file__).parent
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
 
-# --- Local package paths (update these paths) ---
+# --- Local package paths in the same directory ---
 LOCAL_PACKAGES = {
-    "ubuntu1604_amd64": Path("NessusAgent-10.9.0-ubuntu1604_amd64.deb"),
-    "ubuntu1804_amd64": Path("NessusAgent-10.9.0-ubuntu1804_amd64.deb"),
-    "el7_x86_64": Path("NessusAgent-10.9.0-el7.x86_64.rpm"),
-    "el8_x86_64": Path("NessusAgent-10.9.0-el8.x86_64.rpm"),
-    "el8_aarch64": Path("NessusAgent-10.9.0-el8.aarch64.rpm"),
-    "el9_x86_64": Path("NessusAgent-10.9.0-el9.x86_64.rpm"),
-    "el9_aarch64": Path("NessusAgent-10.9.0-el9.aarch64.rpm"),
+    # Ubuntu
+    "ubuntu1604_amd64": BASE_DIR / "NessusAgent-10.9.0-ubuntu1604_amd64.deb",
+    "ubuntu1804_amd64": BASE_DIR / "NessusAgent-10.9.0-ubuntu1804_amd64.deb",
+    "ubuntu2004_amd64": BASE_DIR / "NessusAgent-10.9.0-ubuntu2004_amd64.deb",
+    "ubuntu2204_amd64": BASE_DIR / "NessusAgent-10.9.0-ubuntu2204_amd64.deb",
+    # RHEL
+    "el7_x86_64": BASE_DIR / "NessusAgent-10.9.0-el7.x86_64.rpm",
+    "el8_x86_64": BASE_DIR / "NessusAgent-10.9.0-el8.x86_64.rpm",
+    "el9_x86_64": BASE_DIR / "NessusAgent-10.9.0-el9.x86_64.rpm",
 }
 
-# --- HTML Template ---
+# --- HTML template ---
 TEMPLATE = r"""
 <!doctype html>
 <html lang="en">
@@ -37,7 +41,6 @@ body { background: #f4f6f8; color: #1a1a1a; font-family: Arial, sans-serif; }
 .btn-primary { background: #005eb8; border-color: #005eb8; }
 .btn-primary:hover { background: #004a99; border-color: #004a99; }
 h1, h5, h6 { color: #002f6c; }
-pre { white-space: pre-wrap; background: #e5e7eb; padding: 0.5rem; border-radius: 0.5rem; }
 #live-log { height: 400px; overflow:auto; border:1px solid #ccc; background:#f9fafb; padding:10px; white-space: pre-wrap; }
 </style>
 </head>
@@ -117,7 +120,6 @@ evtSource.onmessage = function(e) {
     logDiv.innerHTML += e.data + "\n";
     logDiv.scrollTop = logDiv.scrollHeight;
 };
-
 const modeCloud = document.getElementById('modeCloud');
 const modeMgr = document.getElementById('modeMgr');
 const mgrFields = document.getElementById('mgrFields');
@@ -136,31 +138,19 @@ def log(message: str):
     log_queue.put(message)
 
 def mask_password(text: str, password: str):
-    if not password:
-        return text
-    return text.replace(password, "***")
+    return text.replace(password, "***") if password else text
 
 def parse_hosts(text: str):
     return [h.strip() for h in text.splitlines() if h.strip()]
 
-def select_local_package(os_type: str, release: str, arch: str) -> Path:
-    log(f"[VERBOSE] Selecting package for OS: {os_type}, release: {release}, arch: {arch}")
-    if os_type == "debian":
-        key = f"ubuntu{release}_{arch}"
-        if key in LOCAL_PACKAGES:
-            return LOCAL_PACKAGES[key]
-        else:
-            raise RuntimeError(f"No local package found for {key}")
-    elif os_type == "rhel":
-        key = f"el{release}_{arch}"
-        if key in LOCAL_PACKAGES:
-            return LOCAL_PACKAGES[key]
-        else:
-            raise RuntimeError(f"No local package found for {key}")
-    else:
-        raise RuntimeError(f"Unsupported OS type: {os_type}")
+def select_local_package(os_type: str, release: str) -> Path:
+    key = f"{os_type}{release}_amd64" if os_type == "debian" else f"el{release}_x86_64"
+    log(f"[VERBOSE] Selecting package: {key}")
+    if key in LOCAL_PACKAGES:
+        return LOCAL_PACKAGES[key]
+    raise RuntimeError(f"No local package found for {key}")
 
-def detect_os_arch(ssh: paramiko.SSHClient):
+def detect_os(ssh: paramiko.SSHClient):
     stdin, stdout, _ = ssh.exec_command(
         "uname -m; if [ -f /etc/debian_version ]; then lsb_release -rs || cat /etc/lsb-release; "
         "elif [ -f /etc/redhat-release ]; then cat /etc/redhat-release; fi"
@@ -172,131 +162,101 @@ def detect_os_arch(ssh: paramiko.SSHClient):
 
     if "Ubuntu" in os_info:
         os_type = "debian"
-        if "16.04" in os_info:
-            release = "1604"
-        elif "18.04" in os_info:
-            release = "1804"
-        else:
-            raise RuntimeError(f"Unsupported Ubuntu version: {os_info}")
+        if "16.04" in os_info: release="1604"
+        elif "18.04" in os_info: release="1804"
+        elif "20.04" in os_info: release="2004"
+        elif "22.04" in os_info: release="2204"
+        else: raise RuntimeError(f"Unsupported Ubuntu version: {os_info}")
     elif "Red Hat" in os_info or "CentOS" in os_info:
-        os_type = "rhel"
         import re
-        match = re.search(r"release (\d+)", os_info, re.IGNORECASE)
-        if match:
-            release = match.group(1)
-        else:
-            raise RuntimeError(f"Unsupported RHEL version string: {os_info}")
+        os_type = "rhel"
+        match = re.search(r"release (\d+)", os_info)
+        if match: release = match.group(1)
+        else: raise RuntimeError(f"Unsupported RHEL version: {os_info}")
     else:
         raise RuntimeError(f"Unsupported OS info: {os_info}")
-
-    return os_type, release, arch
+    return os_type, release
 
 # --- Deployment logic ---
-def deploy_to_host(host: str, username: str, password: str, sudo_password: Optional[str],
-                   key: str, mode: str, mgr_host: Optional[str], mgr_port: Optional[str],
-                   groups: str, force_relink: bool):
+def deploy_to_host(host, username, password, sudo_password, key, mode, mgr_host, mgr_port, groups, force_relink):
     try:
         log(f"[{host}] Connecting via SSH...")
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(host, username=username, password=password, timeout=15)
-        log(f"[{host}] Connected!")
         sudo_pw = sudo_password or password
-
-        os_type, release, arch = detect_os_arch(ssh)
-        local_pkg = select_local_package(os_type, release, arch)
-        remote_path = f"/tmp/{local_pkg.name}"
-
-        log(f"[{host}] Uploading {local_pkg.name} to {remote_path}...")
+        os_type, release = detect_os(ssh)
+        pkg = select_local_package(os_type, release)
+        remote_path = f"/tmp/{pkg.name}"
+        log(f"[{host}] Uploading {pkg.name}...")
         sftp = ssh.open_sftp()
-        sftp.put(str(local_pkg), remote_path)
+        sftp.put(str(pkg), remote_path)
         sftp.close()
         log(f"[{host}] Upload complete.")
 
-        if os_type == "debian":
-            cmd = f"sudo dpkg -i {remote_path} || sudo apt-get -f install -y"
-        else:
-            cmd = f"sudo rpm -ivh {remote_path} || sudo yum localinstall -y {remote_path} || sudo dnf install -y {remote_path}"
-        log(f"[{host}] Installing: {cmd}")
-        stdin, stdout, stderr = ssh.exec_command(cmd, get_pty=True)
-        stdin.write(sudo_pw + "\n"); stdin.flush()
-        out = mask_password(stdout.read().decode(), sudo_pw)
-        err = mask_password(stderr.read().decode(), sudo_pw)
-        for line in (out + err).splitlines():
+        cmd = f"sudo dpkg -i {remote_path} || sudo apt-get -f install -y" if os_type=="debian" else f"sudo rpm -ivh {remote_path} || sudo yum localinstall -y {remote_path} || sudo dnf install -y {remote_path}"
+        log(f"[{host}] Installing package...")
+        stdin, stdout, stderr = ssh.exec_command(cmd,get_pty=True)
+        stdin.write(sudo_pw+"\n"); stdin.flush()
+        for line in (mask_password(stdout.read().decode(),sudo_pw)+mask_password(stderr.read().decode(),sudo_pw)).splitlines():
             log(f"[{host}] {line}")
 
         log(f"[{host}] Enabling and starting Nessus agent service...")
         stdin, stdout, stderr = ssh.exec_command("sudo systemctl enable --now nessusagent", get_pty=True)
-        stdin.write(sudo_pw + "\n"); stdin.flush()
-        out = mask_password(stdout.read().decode(), sudo_pw)
-        err = mask_password(stderr.read().decode(), sudo_pw)
-        for line in (out + err).splitlines():
+        stdin.write(sudo_pw+"\n"); stdin.flush()
+        for line in (mask_password(stdout.read().decode(),sudo_pw)+mask_password(stderr.read().decode(),sudo_pw)).splitlines():
             log(f"[{host}] {line}")
 
         stdin, stdout, _ = ssh.exec_command("/opt/nessus_agent/sbin/nessuscli agent status")
-        status_out = stdout.read().decode().lower()
-        already_linked = "linked" in status_out
-        if already_linked and not force_relink:
-            log(f"[{host}] Agent already linked. Skipping linking.")
+        linked = "linked" in stdout.read().decode().lower()
+        if linked and not force_relink:
+            log(f"[{host}] Agent already linked, skipping.")
         else:
-            if already_linked and force_relink:
+            if linked and force_relink:
                 log(f"[{host}] Forcing re-link...")
                 stdin, stdout, stderr = ssh.exec_command("sudo /opt/nessus_agent/sbin/nessuscli agent unlink", get_pty=True)
-                stdin.write(sudo_pw + "\n"); stdin.flush()
-                out = mask_password(stdout.read().decode(), sudo_pw)
-                for line in out.splitlines():
+                stdin.write(sudo_pw+"\n"); stdin.flush()
+                for line in mask_password(stdout.read().decode(), sudo_pw).splitlines():
                     log(f"[{host}] {line}")
-            if mode == "cloud":
-                cmd = f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --cloud"
-            else:
-                cmd = f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --host={mgr_host} --port={mgr_port}"
-            if groups:
-                cmd += f' --groups="{groups}"'
-            log(f"[{host}] Linking agent: {cmd}")
-            stdin, stdout, stderr = ssh.exec_command(f"sudo {cmd}", get_pty=True)
-            stdin.write(sudo_pw + "\n"); stdin.flush()
-            out = mask_password(stdout.read().decode(), sudo_pw)
-            for line in out.splitlines():
+            link_cmd = f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --cloud" if mode=="cloud" else f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --host={mgr_host} --port={mgr_port}"
+            if groups: link_cmd += f' --groups="{groups}"'
+            log(f"[{host}] Linking agent...")
+            stdin, stdout, stderr = ssh.exec_command(f"sudo {link_cmd}", get_pty=True)
+            stdin.write(sudo_pw+"\n"); stdin.flush()
+            for line in mask_password(stdout.read().decode(), sudo_pw).splitlines():
                 log(f"[{host}] {line}")
 
         ssh.close()
         log(f"[{host}] Deployment finished successfully!")
-
     except Exception as e:
         log(f"[{host}] Deployment FAILED: {e}")
 
 # --- Flask routes ---
 @app.route("/", methods=["GET"])
-def index():
-    return render_template_string(TEMPLATE, hosts="")
+def index(): return render_template_string(TEMPLATE, hosts="")
 
 @app.route("/deploy", methods=["POST"])
 def deploy():
-    hosts = parse_hosts(request.form.get("hosts", ""))
+    hosts = parse_hosts(request.form.get("hosts",""))
     username = request.form.get("username")
     password = request.form.get("password")
     sudo_password = request.form.get("sudo_password") or None
     key = request.form.get("key")
-    mode = request.form.get("mode", "cloud")
+    mode = request.form.get("mode","cloud")
     mgr_host = request.form.get("mgr_host")
-    mgr_port = request.form.get("mgr_port", "8834")
-    groups = request.form.get("groups", "")
-    force_relink = request.form.get("force_relink") == "1"
+    mgr_port = request.form.get("mgr_port","8834")
+    groups = request.form.get("groups","")
+    force_relink = request.form.get("force_relink")=="1"
 
-    def run_deploy():
-        for host in hosts:
-            deploy_to_host(host, username, password, sudo_password, key, mode, mgr_host, mgr_port, groups, force_relink)
-    Thread(target=run_deploy, daemon=True).start()
-
+    Thread(target=lambda: [deploy_to_host(h,username,password,sudo_password,key,mode,mgr_host,mgr_port,groups,force_relink) for h in hosts], daemon=True).start()
     return render_template_string(TEMPLATE, hosts="\n".join(hosts))
 
 @app.route("/stream")
 def stream():
     def event_stream():
         while True:
-            line = log_queue.get()
-            yield f"data: {line}\n\n"
+            yield f"data: {log_queue.get()}\n\n"
     return Response(event_stream(), mimetype="text/event-stream")
 
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8443)
+if __name__=="__main__":
+    app.run(debug=True)

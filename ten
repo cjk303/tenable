@@ -14,9 +14,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
 
 # --- Local package paths in the same directory ---
 LOCAL_PACKAGES = {
-    # Ubuntu (single .deb file)
     "ubuntu_amd64": BASE_DIR / "NessusAgent-10.9.0-ubuntu1604_amd64.deb",
-    # RHEL
     "el7_x86_64": BASE_DIR / "NessusAgent-10.9.0-el7.x86_64.rpm",
     "el8_x86_64": BASE_DIR / "NessusAgent-10.9.0-el8.x86_64.rpm",
     "el9_x86_64": BASE_DIR / "NessusAgent-10.9.0-el9.x86_64.rpm",
@@ -171,7 +169,7 @@ def detect_os(ssh: paramiko.SSHClient):
 
     if "Ubuntu" in os_name or "Debian" in os_name:
         os_type = "debian"
-        release = "all"  # single .deb file used
+        release = "all"  # single .deb file
     elif "Red Hat" in os_name or "CentOS" in os_name:
         import re
         os_type = "rhel"
@@ -201,21 +199,27 @@ def deploy_to_host(host, username, password, sudo_password, key, mode, mgr_host,
         log(f"[{host}] Uploading {pkg.name}...")
         sftp = ssh.open_sftp()
         sftp.put(str(pkg), remote_path)
-        sftp.close()
+        sftp.close()  # ensure SFTP session is closed
         log(f"[{host}] Upload complete.")
 
-        cmd = f"sudo dpkg -i {remote_path} || sudo apt-get -f install -y" if os_type=="debian" else f"sudo rpm -ivh {remote_path} || sudo yum localinstall -y {remote_path} || sudo dnf install -y {remote_path}"
+        # Install package
+        cmd = f"sudo dpkg -i {remote_path}" if os_type=="debian" else f"sudo rpm -ivh {remote_path} || sudo yum localinstall -y {remote_path} || sudo dnf install -y {remote_path}"
         log(f"[{host}] Installing package...")
         stdin, stdout, stderr = ssh.exec_command(cmd,get_pty=True)
         stdin.write(sudo_pw+"\n"); stdin.flush()
-        for line in (mask_password(stdout.read().decode(),sudo_pw)+mask_password(stderr.read().decode(),sudo_pw)).splitlines():
-            log(f"[{host}] {line}")
+
+        for line in iter(stdout.readline, ""):
+            log(f"[{host}] {line.rstrip()}")
+        for line in iter(stderr.readline, ""):
+            log(f"[{host}] {line.rstrip()}")
 
         log(f"[{host}] Enabling and starting Nessus agent service...")
         stdin, stdout, stderr = ssh.exec_command("sudo systemctl enable --now nessusagent", get_pty=True)
         stdin.write(sudo_pw+"\n"); stdin.flush()
-        for line in (mask_password(stdout.read().decode(), sudo_pw)+mask_password(stderr.read().decode(), sudo_pw)).splitlines():
-            log(f"[{host}] {line}")
+        for line in iter(stdout.readline, ""):
+            log(f"[{host}] {line.rstrip()}")
+        for line in iter(stderr.readline, ""):
+            log(f"[{host}] {line.rstrip()}")
 
         stdin, stdout, _ = ssh.exec_command("/opt/nessus_agent/sbin/nessuscli agent status")
         linked = "linked" in stdout.read().decode().lower()
@@ -226,15 +230,19 @@ def deploy_to_host(host, username, password, sudo_password, key, mode, mgr_host,
                 log(f"[{host}] Forcing re-link...")
                 stdin, stdout, stderr = ssh.exec_command("sudo /opt/nessus_agent/sbin/nessuscli agent unlink", get_pty=True)
                 stdin.write(sudo_pw+"\n"); stdin.flush()
-                for line in mask_password(stdout.read().decode(), sudo_pw).splitlines():
-                    log(f"[{host}] {line}")
+                for line in iter(stdout.readline, ""):
+                    log(f"[{host}] {line.rstrip()}")
+                for line in iter(stderr.readline, ""):
+                    log(f"[{host}] {line.rstrip()}")
             link_cmd = f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --cloud" if mode=="cloud" else f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --host={mgr_host} --port={mgr_port}"
             if groups: link_cmd += f' --groups="{groups}"'
             log(f"[{host}] Linking agent...")
             stdin, stdout, stderr = ssh.exec_command(f"sudo {link_cmd}", get_pty=True)
             stdin.write(sudo_pw+"\n"); stdin.flush()
-            for line in mask_password(stdout.read().decode(), sudo_pw).splitlines():
-                log(f"[{host}] {line}")
+            for line in iter(stdout.readline, ""):
+                log(f"[{host}] {line.rstrip()}")
+            for line in iter(stderr.readline, ""):
+                log(f"[{host}] {line.rstrip()}")
 
         ssh.close()
         log(f"[{host}] Deployment finished successfully!")

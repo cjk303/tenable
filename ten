@@ -19,7 +19,7 @@ RPM_URL = "https://downloads.nessus.org/nessus3dl.php?file=nessus-agent-latest-r
 DEB_PATH = WORKDIR / "nessus-agent-latest.deb"
 RPM_PATH = WORKDIR / "nessus-agent-latest.rpm"
 
-# --- HTML Template ---
+# --- HTML Template with Epiq Global-inspired color scheme ---
 TEMPLATE = r"""
 <!doctype html>
 <html lang="en">
@@ -29,11 +29,15 @@ TEMPLATE = r"""
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-body { background: #0f172a; color: #e2e8f0; }
-.card { background: #111827; border: 1px solid #1f2937; border-radius: 1rem; }
-.form-control, .form-select { background: #0b1220; color: #e2e8f0; border: 1px solid #243244; }
-.btn-primary { background: #2563eb; border-color: #2563eb; }
-pre { white-space: pre-wrap; }
+body { background: #f4f6f8; color: #1a1a1a; font-family: Arial, sans-serif; }
+.card { background: #ffffff; border: 1px solid #d1d5db; border-radius: 1rem; }
+.form-control, .form-select { background: #f9fafb; color: #1a1a1a; border: 1px solid #cbd5e1; }
+.btn-primary { background: #005eb8; border-color: #005eb8; }
+.btn-primary:hover { background: #004a99; border-color: #004a99; }
+h1, h5, h6 { color: #002f6c; }
+pre { white-space: pre-wrap; background: #e5e7eb; padding: 0.5rem; border-radius: 0.5rem; }
+.badge.bg-success { background-color: #00a650; }
+.badge.bg-danger { background-color: #d62828; }
 </style>
 </head>
 <body>
@@ -123,7 +127,7 @@ if(modeCloud && modeMgr){ modeCloud.addEventListener('change', toggleFields); mo
 </html>
 """
 
-# --- Helpers ---
+# --- Helper functions ---
 def parse_hosts(text: str) -> List[str]:
     return [h.strip() for h in text.splitlines() if h.strip()]
 
@@ -225,11 +229,9 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         ssh.close()
     return success, "\n".join(log)
 
-
 @app.route("/", methods=["GET"])
 def index():
     return render_template_string(TEMPLATE, hosts="", results=None)
-
 
 @app.route("/deploy", methods=["POST"])
 def deploy():
@@ -250,7 +252,6 @@ def deploy():
         results[h] = {"success": success, "log": log}
 
     return render_template_string(TEMPLATE, hosts="\n".join(hosts), results=results)
-
 
 if __name__ == "__main__":
     app.run(debug=True)

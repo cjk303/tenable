@@ -132,12 +132,21 @@ def parse_hosts(text: str) -> List[str]:
     return [h.strip() for h in text.splitlines() if h.strip()]
 
 def download_package():
-    if not DEB_PATH.exists():
-        r = requests.get(DEB_URL, stream=True)
-        with open(DEB_PATH, 'wb') as f: f.write(r.content)
-    if not RPM_PATH.exists():
-        r = requests.get(RPM_URL, stream=True)
-        with open(RPM_PATH, 'wb') as f: f.write(r.content)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    for url, path in [(DEB_URL, DEB_PATH), (RPM_URL, RPM_PATH)]:
+        if not path.exists() or path.stat().st_size == 0:
+            r = requests.get(url, headers=headers, stream=True, allow_redirects=True)
+            r.raise_for_status()
+            with open(path, 'wb') as f:
+                for chunk in r.iter_content(1024):
+                    f.write(chunk)
+            if path.stat().st_size == 0:
+                raise RuntimeError(f"Downloaded file {path} is empty!")
+
+def mask_password(text: str, password: str) -> str:
+    if not password:
+        return text
+    return text.replace(password, "***")
 
 def deploy_to_host(host: str, username: str, password: str, sudo_password: Optional[str],
                    key: str, mode: str, mgr_host: Optional[str], mgr_port: Optional[str],
@@ -163,6 +172,7 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
                 "test -f /etc/debian_version && echo deb || test -f /etc/redhat-release && echo rhel")
             os_type = stdout.read().decode().strip()
             download_package()
+
             if os_type == 'deb':
                 add("Detected Debian/Ubuntu system.")
                 remote_path = "/tmp/nessus-agent.deb"
@@ -172,10 +182,12 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
                 add("Package uploaded. Installing...")
                 stdin, stdout, stderr = ssh.exec_command(f"sudo dpkg -i {remote_path}", get_pty=True)
                 stdin.write(sudo_pw + "\n"); stdin.flush()
-                add(stdout.read().decode()); add(stderr.read().decode())
+                add(mask_password(stdout.read().decode(), sudo_pw))
+                add(mask_password(stderr.read().decode(), sudo_pw))
                 stdin, stdout, stderr = ssh.exec_command("sudo apt-get -f install -y", get_pty=True)
                 stdin.write(sudo_pw + "\n"); stdin.flush()
-                add(stdout.read().decode())
+                add(mask_password(stdout.read().decode(), sudo_pw))
+
             elif os_type == 'rhel':
                 add("Detected RHEL/CentOS/Fedora system.")
                 remote_path = "/tmp/nessus-agent.rpm"
@@ -187,13 +199,15 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
                     f"sudo rpm -ivh {remote_path} || sudo yum localinstall -y {remote_path} || sudo dnf install -y {remote_path}",
                     get_pty=True)
                 stdin.write(sudo_pw + "\n"); stdin.flush()
-                add(stdout.read().decode()); add(stderr.read().decode())
+                add(mask_password(stdout.read().decode(), sudo_pw))
+                add(mask_password(stderr.read().decode(), sudo_pw))
 
             # Enable & start service
             add("Enabling and starting Nessus agent service.")
             stdin, stdout, stderr = ssh.exec_command("sudo systemctl enable --now nessusagent", get_pty=True)
             stdin.write(sudo_pw + "\n"); stdin.flush()
-            add(stdout.read().decode()); add(stderr.read().decode())
+            add(mask_password(stdout.read().decode(), sudo_pw))
+            add(mask_password(stderr.read().decode(), sudo_pw))
 
         # Linking
         stdin, stdout, _ = ssh.exec_command("/opt/nessus_agent/sbin/nessuscli agent status")
@@ -207,7 +221,8 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
                 add("Forcing re-link: unlinking first.")
                 stdin, stdout, stderr = ssh.exec_command("sudo -S /opt/nessus_agent/sbin/nessuscli agent unlink", get_pty=True)
                 stdin.write(sudo_pw + "\n"); stdin.flush()
-                add(stdout.read().decode()); add(stderr.read().decode())
+                add(mask_password(stdout.read().decode(), sudo_pw))
+                add(mask_password(stderr.read().decode(), sudo_pw))
 
             if mode == "cloud":
                 cmd = f"/opt/nessus_agent/sbin/nessuscli agent link --key={key} --cloud"
@@ -218,7 +233,8 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
             add(f"Running link command: {cmd}")
             stdin, stdout, stderr = ssh.exec_command(f"sudo -S {cmd}", get_pty=True)
             stdin.write(sudo_pw + "\n"); stdin.flush()
-            add(stdout.read().decode()); add(stderr.read().decode())
+            add(mask_password(stdout.read().decode(), sudo_pw))
+            add(mask_password(stderr.read().decode(), sudo_pw))
 
     except Exception as e:
         add(f"FAILED: {e}")
@@ -229,9 +245,11 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         ssh.close()
     return success, "\n".join(log)
 
+
 @app.route("/", methods=["GET"])
 def index():
     return render_template_string(TEMPLATE, hosts="", results=None)
+
 
 @app.route("/deploy", methods=["POST"])
 def deploy():
@@ -252,6 +270,7 @@ def deploy():
         results[h] = {"success": success, "log": log}
 
     return render_template_string(TEMPLATE, hosts="\n".join(hosts), results=results)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

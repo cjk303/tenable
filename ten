@@ -10,19 +10,124 @@ from flask import Flask, render_template_string, request, Response
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me")
 
-# --- Local package paths ---
+# --- Local package paths (update these paths) ---
 LOCAL_PACKAGES = {
-    "ubuntu1604_amd64": Path("/path/to/NessusAgent-10.9.0-ubuntu1604_amd64.deb"),
-    "ubuntu1804_amd64": Path("/path/to/NessusAgent-10.9.0-ubuntu1804_amd64.deb"),
-    "el7_x86_64": Path("/path/to/NessusAgent-10.9.0-el7.x86_64.rpm"),
-    "el8_x86_64": Path("/path/to/NessusAgent-10.9.0-el8.x86_64.rpm"),
-    "el8_aarch64": Path("/path/to/NessusAgent-10.9.0-el8.aarch64.rpm"),
-    "el9_x86_64": Path("/path/to/NessusAgent-10.9.0-el9.x86_64.rpm"),
-    "el9_aarch64": Path("/path/to/NessusAgent-10.9.0-el9.aarch64.rpm"),
+    "ubuntu1604_amd64": Path("NessusAgent-10.9.0-ubuntu1604_amd64.deb"),
+    "ubuntu1804_amd64": Path("NessusAgent-10.9.0-ubuntu1804_amd64.deb"),
+    "el7_x86_64": Path("NessusAgent-10.9.0-el7.x86_64.rpm"),
+    "el8_x86_64": Path("NessusAgent-10.9.0-el8.x86_64.rpm"),
+    "el8_aarch64": Path("NessusAgent-10.9.0-el8.aarch64.rpm"),
+    "el9_x86_64": Path("NessusAgent-10.9.0-el9.x86_64.rpm"),
+    "el9_aarch64": Path("NessusAgent-10.9.0-el9.aarch64.rpm"),
 }
 
-# --- HTML template ---
-TEMPLATE = r"""<Your HTML template here, same as previous with live log div>"""
+# --- HTML Template ---
+TEMPLATE = r"""
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tenable Linux Agent Deployer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body { background: #f4f6f8; color: #1a1a1a; font-family: Arial, sans-serif; }
+.card { background: #ffffff; border: 1px solid #d1d5db; border-radius: 1rem; }
+.form-control, .form-select { background: #f9fafb; color: #1a1a1a; border: 1px solid #cbd5e1; }
+.btn-primary { background: #005eb8; border-color: #005eb8; }
+.btn-primary:hover { background: #004a99; border-color: #004a99; }
+h1, h5, h6 { color: #002f6c; }
+pre { white-space: pre-wrap; background: #e5e7eb; padding: 0.5rem; border-radius: 0.5rem; }
+#live-log { height: 400px; overflow:auto; border:1px solid #ccc; background:#f9fafb; padding:10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="container py-4">
+<h1 class="fw-bold text-center mb-4">Tenable Linux Agent Deployer</h1>
+<div class="card p-4">
+<h5>Deploy to Hosts</h5>
+<form method="post" action="/deploy">
+<div class="mb-3">
+<label class="form-label">Hosts (one per line)</label>
+<textarea name="hosts" class="form-control" rows="4">{{ hosts or '' }}</textarea>
+</div>
+<div class="row g-3">
+<div class="col-md-6">
+<label class="form-label">SSH Username</label>
+<input name="username" class="form-control" required>
+</div>
+<div class="col-md-6">
+<label class="form-label">SSH Password</label>
+<input name="password" type="password" class="form-control" required>
+</div>
+</div>
+<div class="mt-3">
+<label class="form-label">Sudo Password (optional)</label>
+<input name="sudo_password" type="password" class="form-control">
+</div>
+<hr>
+<h6>Link Agent Options</h6>
+<div class="mb-3">
+<label class="form-label">Activation Key</label>
+<input name="key" class="form-control" required>
+</div>
+<div class="mb-3">
+<label class="form-label">Link Mode</label><br>
+<div class="form-check form-check-inline">
+<input class="form-check-input" type="radio" name="mode" value="cloud" id="modeCloud" checked>
+<label class="form-check-label" for="modeCloud">Cloud (Tenable.io)</label>
+</div>
+<div class="form-check form-check-inline">
+<input class="form-check-input" type="radio" name="mode" value="manager" id="modeMgr">
+<label class="form-check-label" for="modeMgr">On-Prem Manager</label>
+</div>
+</div>
+<div id="mgrFields">
+<div class="row g-3">
+<div class="col-md-6">
+<label class="form-label">Manager Host</label>
+<input name="mgr_host" class="form-control" placeholder="scanner.example.com">
+</div>
+<div class="col-md-6">
+<label class="form-label">Manager Port</label>
+<input name="mgr_port" class="form-control" value="8834">
+</div>
+</div>
+</div>
+<div class="mt-3">
+<label class="form-label">Groups/Policy Tags (optional)</label>
+<input name="groups" class="form-control" placeholder="linux-servers,production">
+</div>
+<div class="form-check mt-3">
+<input class="form-check-input" type="checkbox" value="1" id="forceRelink" name="force_relink">
+<label class="form-check-label" for="forceRelink">Force re-link even if already linked</label>
+</div>
+<div class="mt-3">
+<button class="btn btn-primary" type="submit">Deploy & Link</button>
+</div>
+</form>
+</div>
+<hr>
+<h5>Live Deployment Log:</h5>
+<div id="live-log"></div>
+<script>
+const evtSource = new EventSource("/stream");
+const logDiv = document.getElementById("live-log");
+evtSource.onmessage = function(e) {
+    logDiv.innerHTML += e.data + "\n";
+    logDiv.scrollTop = logDiv.scrollHeight;
+};
+
+const modeCloud = document.getElementById('modeCloud');
+const modeMgr = document.getElementById('modeMgr');
+const mgrFields = document.getElementById('mgrFields');
+function toggleFields() { mgrFields.style.display = modeMgr.checked ? 'block' : 'none'; }
+if(modeCloud && modeMgr){ modeCloud.addEventListener('change', toggleFields); modeMgr.addEventListener('change', toggleFields); toggleFields(); }
+</script>
+</div>
+</body>
+</html>
+"""
 
 # --- Live log queue ---
 log_queue = Queue()
@@ -38,7 +143,6 @@ def mask_password(text: str, password: str):
 def parse_hosts(text: str):
     return [h.strip() for h in text.splitlines() if h.strip()]
 
-# --- OS and architecture detection ---
 def select_local_package(os_type: str, release: str, arch: str) -> Path:
     log(f"[VERBOSE] Selecting package for OS: {os_type}, release: {release}, arch: {arch}")
     if os_type == "debian":
@@ -76,7 +180,6 @@ def detect_os_arch(ssh: paramiko.SSHClient):
             raise RuntimeError(f"Unsupported Ubuntu version: {os_info}")
     elif "Red Hat" in os_info or "CentOS" in os_info:
         os_type = "rhel"
-        # Extract major version number
         import re
         match = re.search(r"release (\d+)", os_info, re.IGNORECASE)
         if match:
@@ -98,22 +201,18 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(host, username=username, password=password, timeout=15)
         log(f"[{host}] Connected!")
-
         sudo_pw = sudo_password or password
 
-        # Detect OS and architecture
         os_type, release, arch = detect_os_arch(ssh)
         local_pkg = select_local_package(os_type, release, arch)
         remote_path = f"/tmp/{local_pkg.name}"
 
-        # Upload package
         log(f"[{host}] Uploading {local_pkg.name} to {remote_path}...")
         sftp = ssh.open_sftp()
         sftp.put(str(local_pkg), remote_path)
         sftp.close()
         log(f"[{host}] Upload complete.")
 
-        # Install
         if os_type == "debian":
             cmd = f"sudo dpkg -i {remote_path} || sudo apt-get -f install -y"
         else:
@@ -126,7 +225,6 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         for line in (out + err).splitlines():
             log(f"[{host}] {line}")
 
-        # Enable service
         log(f"[{host}] Enabling and starting Nessus agent service...")
         stdin, stdout, stderr = ssh.exec_command("sudo systemctl enable --now nessusagent", get_pty=True)
         stdin.write(sudo_pw + "\n"); stdin.flush()
@@ -135,7 +233,6 @@ def deploy_to_host(host: str, username: str, password: str, sudo_password: Optio
         for line in (out + err).splitlines():
             log(f"[{host}] {line}")
 
-        # Link agent
         stdin, stdout, _ = ssh.exec_command("/opt/nessus_agent/sbin/nessuscli agent status")
         status_out = stdout.read().decode().lower()
         already_linked = "linked" in status_out
@@ -202,4 +299,4 @@ def stream():
     return Response(event_stream(), mimetype="text/event-stream")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=8443)

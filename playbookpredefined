@@ -41,14 +41,14 @@
 
     - name: Upload the matching RHEL package
       copy:
-        src: "{{ rhel_package }}"
+        src: "{{ playbook_dir }}/{{ rhel_package }}"
         dest: "/tmp/{{ rhel_package }}"
         mode: '0755'
       when: os_family == "RedHat" and rhel_package != ''
 
     - name: Upload Debian/Ubuntu package
       copy:
-        src: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        src: "{{ playbook_dir }}/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         dest: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         mode: '0755'
       when: os_family == "Debian"

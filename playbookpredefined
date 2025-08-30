@@ -37,18 +37,25 @@
     - name: Fail if RHEL version unsupported
       fail:
         msg: "Unsupported RHEL version {{ os_major }}. Only 7, 8, 9 are supported."
-      when: os_family == "RedHat" and rhel_package == ''
+      when: os_family == "RedHat" and rhel_package | trim == ''
+
+    - name: Debug OS info
+      debug:
+        msg:
+          - "OS family: {{ os_family }}"
+          - "OS major: {{ os_major }}"
+          - "RHEL package: {{ rhel_package }}"
 
     - name: Upload the matching RHEL package
       copy:
-        src: "{{ playbook_dir }}/{{ rhel_package }}"
+        src: "{{ rhel_package }}"
         dest: "/tmp/{{ rhel_package }}"
         mode: '0755'
-      when: os_family == "RedHat" and rhel_package != ''
+      when: os_family == "RedHat" and rhel_package | trim != ''
 
     - name: Upload Debian/Ubuntu package
       copy:
-        src: "{{ playbook_dir }}/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        src: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         dest: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         mode: '0755'
       when: os_family == "Debian"
@@ -57,7 +64,7 @@
       yum:
         name: "/tmp/{{ rhel_package }}"
         state: present
-      when: os_family == "RedHat" and rhel_package != ''
+      when: os_family == "RedHat" and rhel_package | trim != ''
 
     - name: Install Nessus Agent on Debian/Ubuntu
       apt:

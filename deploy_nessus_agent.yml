@@ -1,5 +1,5 @@
 ---
-- name: Deploy Nessus Agent
+- name: Deploy Nessus Agent with re-onboarding
   hosts: agents
   gather_facts: yes
   become: true
@@ -43,6 +43,16 @@
       fail:
         msg: "Unsupported OS family/version: {{ ansible_facts['os_family'] }} {{ ansible_facts['distribution_major_version'] }}"
       when: nessus_pkg is not defined
+
+    - name: Check if agent is already linked
+      ansible.builtin.shell: /opt/nessus_agent/sbin/nessuscli agent status
+      register: agent_status
+      ignore_errors: yes
+
+    - name: Unlink existing agent if linked
+      ansible.builtin.shell: /opt/nessus_agent/sbin/nessuscli agent unlink
+      when: agent_status.rc == 0
+      ignore_errors: yes
 
     - name: Copy Nessus Agent installer to remote
       ansible.builtin.copy:

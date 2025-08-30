@@ -1,0 +1,14 @@
+{
+  "account1": {
+    "username": "epiqadmin",
+    "password": "ENC_PASSWORD_1",
+    "sudo_password": "ENC_SUDO_1",
+    "activation_key": "PREDEFINED_KEY_1"
+  },
+  "account2": {
+    "username": "clouduser",
+    "password": "ENC_PASSWORD_2",
+    "sudo_password": "ENC_SUDO_2",
+    "activation_key": "PREDEFINED_KEY_2"
+  }
+}

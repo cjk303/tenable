@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Deploy Nessus Agent</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #e6f0fa; color: #003366; padding: 20px; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input, select { margin-bottom: 10px; width: 300px; padding: 5px; }
+        button { background-color: #003366; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+        button:hover { background-color: #0059b3; }
+        .checkbox { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <img src="/static/epiq-vector-logo.png" alt="Epiq Logo" height="50">
+    <h1>Deploy Nessus Agent</h1>
+    <form method="POST" action="/deploy">
+        <label for="hosts">Target Hosts (comma separated):</label>
+        <input type="text" id="hosts" name="hosts" required>
+
+        <label for="activation_key">Activation Key:</label>
+        <input type="text" id="activation_key" name="activation_key" required>
+
+        <label for="mode">Mode:</label>
+        <select id="mode" name="mode">
+            <option value="manager">Manager</option>
+            <option value="cloud">Cloud</option>
+        </select>
+
+        <div class="checkbox">
+            <label>
+                <input type="checkbox" name="remove_rapid7" value="true"> Remove Rapid7
+            </label>
+        </div>
+
+        <button type="submit">Deploy Nessus Agent</button>
+    </form>
+</body>
+</html>

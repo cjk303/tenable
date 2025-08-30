@@ -1,6 +1,7 @@
 ---
 - name: Deploy Nessus Agent
   hosts: agents
+  gather_facts: yes
   become: true
   vars:
     activation_key: "{{ activation_key | default('') }}"
@@ -18,25 +19,22 @@
       set_fact:
         ansible_become_method: "{{ escalate_method }}"
 
-    - name: Gather facts
-      ansible.builtin.setup:
-
-    - name: Pick package filename for Debian/Ubuntu
+    - name: Determine package for Debian/Ubuntu
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
       when: ansible_facts['os_family'] == "Debian"
 
-    - name: Pick package filename for RHEL 7
+    - name: Determine package for RHEL 7
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-el7.x86_64.rpm"
       when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "7"
 
-    - name: Pick package filename for RHEL 8
+    - name: Determine package for RHEL 8
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-el8.x86_64.rpm"
       when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
 
-    - name: Pick package filename for RHEL 9
+    - name: Determine package for RHEL 9
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-el9.x86_64.rpm"
       when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "9"
@@ -46,7 +44,7 @@
         msg: "Unsupported OS family/version: {{ ansible_facts['os_family'] }} {{ ansible_facts['distribution_major_version'] }}"
       when: nessus_pkg is not defined
 
-    - name: Copy Nessus Agent installer
+    - name: Copy Nessus Agent installer to remote
       ansible.builtin.copy:
         src: "{{ nessus_pkg }}"
         dest: "/tmp/{{ nessus_pkg }}"
@@ -66,10 +64,10 @@
         state: started
         enabled: yes
 
-    - name: Build linking command
+    - name: Build linking command (force relink)
       set_fact:
         link_cmd: >-
-          /opt/nessus_agent/sbin/nessuscli agent link
+          /opt/nessus_agent/sbin/nessuscli agent link --force
           --key={{ activation_key }}
           {% if mode == "cloud" -%}
           --cloud

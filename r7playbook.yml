@@ -1,39 +1,23 @@
 ---
-- name: Deploy Nessus Agent with optional Rapid7 removal
+- name: Deploy Nessus Agent with re-onboarding
   hosts: agents
   gather_facts: yes
   become: true
+
   vars:
+    # Safe defaults for all vars passed from Flask
     activation_key: "{{ activation_key | default('') }}"
     groups: "{{ groups | default('') }}"
     mode: "{{ mode | default('cloud') }}"
     manager_host: "{{ manager_host | default('') }}"
     manager_port: "{{ manager_port | default('8834') }}"
-    escalate_method: "{{ escalate_method | default('sudo') }}"
+    ansible_user: "{{ ansible_user | default('') }}"
+    ansible_password: "{{ ansible_password | default('') }}"
+    ansible_become_password: "{{ ansible_become_password | default(ansible_password) }}"
+    ansible_become_method: "{{ escalate_method | default('sudo') }}"
     remove_rapid7: "{{ remove_rapid7 | default('false') }}"
 
   tasks:
-    - name: Set become method dynamically
-      set_fact:
-        ansible_become_method: "{{ escalate_method }}"
-
-    # ------------------------
-    # Optional Rapid7 Removal
-    # ------------------------
-    - name: Copy Rapid7 remover script
-      ansible.builtin.copy:
-        src: r7remover.sh
-        dest: /tmp/r7remover.sh
-        mode: "0755"
-      when: remove_rapid7 | bool
-
-    - name: Run Rapid7 remover script
-      ansible.builtin.shell: /tmp/r7remover.sh
-      when: remove_rapid7 | bool
-
-    # ------------------------
-    # Nessus Agent Deployment
-    # ------------------------
     - name: Determine package for Debian/Ubuntu
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
@@ -58,6 +42,20 @@
       fail:
         msg: "Unsupported OS family/version: {{ ansible_facts['os_family'] }} {{ ansible_facts['distribution_major_version'] }}"
       when: nessus_pkg is not defined
+
+    - name: Optionally run Rapid7 remover script
+      when: remove_rapid7 | bool
+      block:
+        - name: Copy Rapid7 remover script
+          ansible.builtin.copy:
+            src: r7remover.sh
+            dest: /tmp/r7remover.sh
+            mode: "0755"
+
+        - name: Run Rapid7 remover script
+          ansible.builtin.shell: /tmp/r7remover.sh
+          args:
+            executable: /bin/bash
 
     - name: Check if agent is already linked
       ansible.builtin.shell: /opt/nessus_agent/sbin/nessuscli agent status

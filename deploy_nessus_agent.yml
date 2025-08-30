@@ -9,6 +9,9 @@
     manager_host: "{{ manager_host | default('') }}"
     manager_port: "{{ manager_port | default('8834') }}"
     escalate_method: "{{ escalate_method | default('sudo') }}"
+    ansible_user: "{{ ansible_user | default('') }}"
+    ansible_password: "{{ ansible_password | default('') }}"
+    ansible_become_password: "{{ ansible_become_password | default(ansible_password) }}"
 
   tasks:
     - name: Set become method dynamically

@@ -1,8 +1,6 @@
-from flask import Flask, render_template, request, Response, url_for
-import os
-import json
-import tempfile
-import subprocess
+from flask import Flask, render_template, request, Response
+import os, json, tempfile, subprocess
+from cryptography.fernet import Fernet
 
 app = Flask(__name__)
 
@@ -10,16 +8,22 @@ app = Flask(__name__)
 with open("predefined_accounts.json") as f:
     PREDEFINED_ACCOUNTS = json.load(f)
 
+# Load encryption key from environment
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+cipher = Fernet(ENCRYPTION_KEY.encode())
+
+def decrypt_password(enc_password):
+    return cipher.decrypt(enc_password.encode()).decode()
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        # Determine if a predefined account is selected
         account_key = request.form.get("predefined_account")
         if account_key and account_key in PREDEFINED_ACCOUNTS:
             account = PREDEFINED_ACCOUNTS[account_key]
             username = account["username"]
-            password = account["password"]
-            sudo_password = account["sudo_password"]
+            password = decrypt_password(account["password"])
+            sudo_password = decrypt_password(account["sudo_password"])
             activation_key = account["activation_key"]
         else:
             username = request.form.get("username")
@@ -34,9 +38,8 @@ def index():
         manager_port = request.form.get("manager_port")
         escalate_method = request.form.get("escalate_method")
 
-        # Create ephemeral inventory
-        inventory_content = "[agents]\n"
-        inventory_content += "\n".join(hosts) + "\n"
+        # Ephemeral Ansible inventory
+        inventory_content = "[agents]\n" + "\n".join(hosts) + "\n"
         inventory_content += "[agents:vars]\n"
         inventory_content += f"ansible_user={username}\n"
         inventory_content += f"ansible_password={password}\n"
@@ -52,7 +55,6 @@ def index():
         tmp_inventory.write(inventory_content.encode())
         tmp_inventory.close()
 
-        # Run ansible playbook and stream logs
         def stream_logs():
             cmd = ["ansible-playbook", "-i", tmp_inventory.name, "deploy_nessus_agent.yml"]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

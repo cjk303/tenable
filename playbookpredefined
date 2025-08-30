@@ -24,34 +24,44 @@
       ignore_errors: yes
       when: force_relink
 
-    - name: Set appropriate RHEL package filename
-      set_fact:
-        rhel_package: >-
-          {% if os_major == 7 %} NessusAgent-10.9.0-el7.x86_64.rpm
-          {% elif os_major == 8 %} NessusAgent-10.9.0-el8.x86_64.rpm
-          {% elif os_major == 9 %} NessusAgent-10.9.0-el9.x86_64.rpm
-          {% else %} ''
-          {% endif %}
-      when: os_family == "RedHat"
-
-    - name: Fail if RHEL version unsupported
-      fail:
-        msg: "Unsupported RHEL version {{ os_major }}. Only 7, 8, 9 are supported."
-      when: os_family == "RedHat" and rhel_package | trim == ''
-
-    - name: Debug OS info
-      debug:
-        msg:
-          - "OS family: {{ os_family }}"
-          - "OS major: {{ os_major }}"
-          - "RHEL package: {{ rhel_package }}"
-
-    - name: Upload the matching RHEL package
+    - name: Upload RHEL 7 package
       copy:
-        src: "{{ rhel_package }}"
-        dest: "/tmp/{{ rhel_package }}"
+        src: "el7.rpm"
+        dest: "/tmp/el7.rpm"
         mode: '0755'
-      when: os_family == "RedHat" and rhel_package | trim != ''
+      when: os_family == "RedHat" and os_major == 7
+
+    - name: Install RHEL 7 package
+      yum:
+        name: "/tmp/el7.rpm"
+        state: present
+      when: os_family == "RedHat" and os_major == 7
+
+    - name: Upload RHEL 8 package
+      copy:
+        src: "el8.rpm"
+        dest: "/tmp/el8.rpm"
+        mode: '0755'
+      when: os_family == "RedHat" and os_major == 8
+
+    - name: Install RHEL 8 package
+      yum:
+        name: "/tmp/el8.rpm"
+        state: present
+      when: os_family == "RedHat" and os_major == 8
+
+    - name: Upload RHEL 9 package
+      copy:
+        src: "el9.rpm"
+        dest: "/tmp/el9.rpm"
+        mode: '0755'
+      when: os_family == "RedHat" and os_major == 9
+
+    - name: Install RHEL 9 package
+      yum:
+        name: "/tmp/el9.rpm"
+        state: present
+      when: os_family == "RedHat" and os_major == 9
 
     - name: Upload Debian/Ubuntu package
       copy:
@@ -60,13 +70,7 @@
         mode: '0755'
       when: os_family == "Debian"
 
-    - name: Install Nessus Agent on RedHat
-      yum:
-        name: "/tmp/{{ rhel_package }}"
-        state: present
-      when: os_family == "RedHat" and rhel_package | trim != ''
-
-    - name: Install Nessus Agent on Debian/Ubuntu
+    - name: Install Debian/Ubuntu package
       apt:
         deb: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         state: present

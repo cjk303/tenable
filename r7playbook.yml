@@ -14,6 +14,7 @@
     remove_rapid7: "{{ remove_rapid7 | default('false') }}"
 
   tasks:
+
     # Optional Rapid7 removal
     - name: Copy Rapid7 remover script
       ansible.builtin.copy:
@@ -28,30 +29,30 @@
         executable: /bin/bash
       when: remove_rapid7 | bool
 
-    # OS detection
+    # OS detection and package selection
     - name: Determine package for Debian/Ubuntu
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
-      when: ansible_facts['os_family'] == "Debian"
+      when: ansible_facts.get('os_family', '') == "Debian"
 
     - name: Determine package for RHEL 7
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-el7.x86_64.rpm"
-      when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "7"
+      when: ansible_facts.get('os_family', '') == "RedHat" and ansible_facts.get('distribution_major_version', '') == "7"
 
     - name: Determine package for RHEL 8
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-el8.x86_64.rpm"
-      when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
+      when: ansible_facts.get('os_family', '') == "RedHat" and ansible_facts.get('distribution_major_version', '') == "8"
 
     - name: Determine package for RHEL 9
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-el9.x86_64.rpm"
-      when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "9"
+      when: ansible_facts.get('os_family', '') == "RedHat" and ansible_facts.get('distribution_major_version', '') == "9"
 
     - name: Fail if OS is unsupported
       fail:
-        msg: "Unsupported OS family/version: {{ ansible_facts['os_family'] }} {{ ansible_facts['distribution_major_version'] }}"
+        msg: "Unsupported OS family/version: {{ ansible_facts.get('os_family', 'unknown') }} {{ ansible_facts.get('distribution_major_version', 'unknown') }}"
       when: nessus_pkg is not defined
 
     # Nessus Agent deployment
@@ -73,11 +74,11 @@
 
     - name: Install Nessus Agent on Debian/Ubuntu
       ansible.builtin.shell: dpkg -i /tmp/{{ nessus_pkg }} || apt-get install -f -y
-      when: ansible_facts['os_family'] == "Debian"
+      when: ansible_facts.get('os_family', '') == "Debian"
 
     - name: Install Nessus Agent on RHEL
       ansible.builtin.shell: rpm -ivh --replacepkgs /tmp/{{ nessus_pkg }}
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts.get('os_family', '') == "RedHat"
 
     - name: Enable and start Nessus Agent service
       ansible.builtin.service:

@@ -1,80 +1,92 @@
 from flask import Flask, render_template, request, Response
-import os
-import subprocess
-import yaml
-import json
+import os, json, tempfile, subprocess
 from cryptography.fernet import Fernet
 
 app = Flask(__name__)
 
-FERNET_KEY_FILE = "fernet.key"
-ACCOUNTS_FILE = "accounts.json"
+# Load predefined accounts
+PREDEFINED_FILE = "predefined_accounts.json"
+if not os.path.isfile(PREDEFINED_FILE):
+    open(PREDEFINED_FILE, "w").write("{}")
 
-def load_fernet_key():
-    if not os.path.exists(FERNET_KEY_FILE):
-        key = Fernet.generate_key()
-        with open(FERNET_KEY_FILE, "wb") as f:
-            f.write(key)
-    else:
-        with open(FERNET_KEY_FILE, "rb") as f:
-            key = f.read()
-    return Fernet(key)
+with open(PREDEFINED_FILE) as f:
+    PREDEFINED_ACCOUNTS = json.load(f)
 
-def get_decrypted_account(account_name):
-    fernet = load_fernet_key()
-    with open(ACCOUNTS_FILE, "r") as fjson:
-        accounts = json.load(fjson)
-    if account_name not in accounts:
-        raise ValueError(f"Account {account_name} not found")
-    user = accounts[account_name]["username"]
-    password = fernet.decrypt(accounts[account_name]["password"].encode()).decode()
-    key = accounts[account_name]["key"]
-    return user, password, key
+# Load Fernet key
+KEY_FILE = "fernet.key"
+if not os.path.isfile(KEY_FILE):
+    raise FileNotFoundError(f"Fernet key file '{KEY_FILE}' not found. Generate it first.")
 
-@app.route("/", methods=["GET"])
+with open(KEY_FILE, "r") as kf:
+    ENCRYPTION_KEY = kf.read().strip()
+
+cipher = Fernet(ENCRYPTION_KEY.encode())
+
+def decrypt_password(enc_password):
+    return cipher.decrypt(enc_password.encode()).decode()
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if os.path.exists(ACCOUNTS_FILE):
-        with open(ACCOUNTS_FILE, "r") as f:
-            accounts = list(json.load(f).keys())
-    else:
-        accounts = []
-    return render_template("index.html", accounts=accounts)
+    if request.method == "POST":
+        account_key = request.form.get("predefined_account")
+        use_predefined = account_key and account_key in PREDEFINED_ACCOUNTS
 
-@app.route("/deploy", methods=["POST"])
-def deploy():
-    hosts = request.form.get("hosts")
-    mode = request.form.get("mode")
-    account_name = request.form.get("account")
-    remove_rapid7 = request.form.get("remove_rapid7") == "true"
-    override_key = request.form.get("activation_key")
+        # Determine credentials
+        if use_predefined:
+            account = PREDEFINED_ACCOUNTS[account_key]
+            username = account["username"]
+            password = decrypt_password(account["password"])
+            sudo_password = decrypt_password(account["sudo_password"])
+            activation_key = account["activation_key"]
+        else:
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "").strip()
+            sudo_password = request.form.get("sudo_password", "").strip()
+            activation_key = request.form.get("activation_key", "").strip()
 
-    # Decrypt credentials
-    username, password, account_key = get_decrypted_account(account_name)
-    activation_key = override_key if override_key else account_key
+        if not username or not password or not activation_key:
+            return "Error: username, password, and activation key are required.", 400
 
-    # Write vars for Ansible
-    vars_dict = {
-        "hosts_list": [h.strip() for h in hosts.split(",")],
-        "ansible_ssh_user": username,
-        "ansible_ssh_pass": password,
-        "activation_key": activation_key,
-        "mode": mode,
-        "remove_rapid7": remove_rapid7
-    }
+        hosts = request.form.get("hosts", "").splitlines()
+        groups = request.form.get("groups", "")
+        mode = request.form.get("mode", "cloud")
+        manager_host = request.form.get("manager_host", "")
+        manager_port = request.form.get("manager_port", "8834")
+        escalate_method = request.form.get("escalate_method", "sudo")
+        remove_rapid7 = "true" if request.form.get("remove_rapid7") else "false"
 
-    with open("vars.yml", "w") as f:
-        yaml.dump(vars_dict, f)
+        # --- Ephemeral Ansible Inventory ---
+        inventory_content = "[agents]\n" + "\n".join(hosts) + "\n\n"
+        inventory_content += "[agents:vars]\n"
+        inventory_content += f"ansible_user={username}\n"
+        inventory_content += f"ansible_password={password}\n"
+        inventory_content += f"ansible_become_password={sudo_password}\n"
+        inventory_content += f"activation_key={activation_key}\n"
+        inventory_content += f"groups={groups}\n"
+        inventory_content += f"mode={mode}\n"
+        inventory_content += f"manager_host={manager_host}\n"
+        inventory_content += f"manager_port={manager_port}\n"
+        inventory_content += f"escalate_method={escalate_method}\n"
+        inventory_content += f"remove_rapid7={remove_rapid7}\n"
 
-    cmd = ["ansible-playbook", "-i", "localhost,", "deploy_nessus_agent.yml", "-e", "@vars.yml"]
+        tmp_inventory = tempfile.NamedTemporaryFile(delete=False)
+        tmp_inventory.write(inventory_content.encode())
+        tmp_inventory.close()
 
-    def generate():
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in iter(process.stdout.readline, ''):
-            yield line
-        process.stdout.close()
-        process.wait()
+        # Stream ansible-playbook output to browser
+        def stream_logs():
+            cmd = ["ansible-playbook", "-i", tmp_inventory.name, "deploy_nessus_agent.yml"]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            try:
+                for line in iter(process.stdout.readline, b""):
+                    yield f"data:{line.decode()}\n"
+            finally:
+                process.stdout.close()
+                os.unlink(tmp_inventory.name)
 
-    return Response(generate(), mimetype='text/plain')
+        return Response(stream_logs(), mimetype='text/event-stream')
+
+    return render_template("index.html", predefined_accounts=PREDEFINED_ACCOUNTS)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8443)

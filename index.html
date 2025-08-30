@@ -10,13 +10,23 @@
     .form-label { font-weight: bold; }
     .btn-epiq { background-color: #FF8200; color: white; }
     .btn-epiq:hover { background-color: #e67300; }
+    #logBox {
+      background-color: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 1rem;
+      height: 400px;
+      overflow-y: scroll;
+      border-radius: 0.5rem;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
   <div class="container py-5">
     <div class="card shadow p-4">
       <h2 class="mb-4 text-center">Nessus Agent Deployment</h2>
-      <form method="post">
+      <form id="deployForm" method="post">
         <div class="mb-3">
           <label class="form-label">Hosts (one per line)</label>
           <textarea name="hosts" class="form-control" rows="4" required></textarea>
@@ -30,6 +40,10 @@
             <label class="form-label">Password</label>
             <input type="password" name="password" class="form-control" required>
           </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Sudo Password</label>
+          <input type="password" name="sudo_password" class="form-control" required>
         </div>
         <div class="mb-3">
           <label class="form-label">Activation Key</label>
@@ -65,7 +79,38 @@
         </div>
         <button type="submit" class="btn btn-epiq w-100">Deploy</button>
       </form>
+
+      <div id="logBox" class="mt-4"></div>
     </div>
   </div>
+
+  <script>
+    document.getElementById("deployForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      document.getElementById("logBox").innerHTML = "Starting deployment...\n";
+      const formData = new FormData(this);
+      fetch("/", { method: "POST", body: formData })
+        .then(response => {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          function read() {
+            reader.read().then(({done, value}) => {
+              if (done) return;
+              const text = decoder.decode(value);
+              text.split("\\n").forEach(line => {
+                if (line.startsWith("data:")) {
+                  const clean = line.replace("data:", "");
+                  const logBox = document.getElementById("logBox");
+                  logBox.innerText += clean + "\\n";
+                  logBox.scrollTop = logBox.scrollHeight;
+                }
+              });
+              read();
+            });
+          }
+          read();
+        });
+    });
+  </script>
 </body>
 </html>

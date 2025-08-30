@@ -1,0 +1,58 @@
+#!/bin/bash
+
+RAPID7_BASE="/opt/rapid7"
+BASE_INSTALL="${RAPID7_BASE}/ir_agent"
+REMOVE_EXISTING="true"
+
+remove_agent_base() {
+    echo "Checking agent base installation for removal"
+    if [ -d ${BASE_INSTALL} ]
+    then
+        echo "Base installation directory exists: ${BASE_INSTALL}"
+        if [ "${BASE_INSTALL}" == "/" ] || [ "${BASE_INSTALL}" == "." ]
+        then
+            echo "Will not remove configured base installation directory ('.' or '/'): ${BASE_INSTALL}"
+            return
+        fi
+        echo "Removing directory: ${BASE_INSTALL}"
+        rm -Rf ${BASE_INSTALL} > /dev/null 2>&1
+        if [ "$(ls ${RAPID7_BASE} | wc -l)" -eq "0" ]
+        then
+            if [ "${RAPID7_BASE}" == "/" ] || [ "${RAPID7_BASE}" == "." ]
+            then
+                echo "Will not remove configured Rapid7 base directory ('.' or '/'): ${RAPID7_BASE}"
+                return
+            fi
+            echo "Removing empty directory: ${RAPID7_BASE}"
+            rm -Rf ${RAPID7_BASE} > /dev/null 2>&1
+        fi
+    else
+        echo "Installation directory does not exist"
+    fi
+}
+
+uninstall() {
+    REMOVE_EXISTING="true"
+    # Stop/remove the agent service.
+    systemctl stop ir_agent.service 2>/dev/null
+    systemctl disable ir_agent.service 2>/dev/null
+    service ir_agent stop 2>/dev/null
+    rm /etc/init.d/ir_agent 2>/dev/null
+    rm /etc/systemd/system/ir_agent.service 2>/dev/null
+    # Remove the installed agent.
+    remove_agent_base
+
+    # Remove R7ScanAssistant depending on OS type
+    if [ -f /etc/redhat-release ]; then
+        echo "Detected Red Hat-based system. Removing R7ScanAssistant with yum..."
+        yum remove -y R7ScanAssistant
+    elif [ -f /etc/lsb-release ] || [ -f /etc/debian_version ]; then
+        echo "Detected Ubuntu/Debian-based system. Removing R7ScanAssistant with apt..."
+        apt remove -y R7ScanAssistant
+    else
+        echo "OS type not detected. Please remove R7ScanAssistant manually if needed."
+    fi
+}
+
+# Run uninstall if called directly
+uninstall

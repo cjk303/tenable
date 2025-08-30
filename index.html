@@ -26,43 +26,63 @@
       color: #0C2340;
     }
     input:focus, textarea:focus, select:focus {
-      border-color: #FF8200;
-      box-shadow: 0 0 5px #FF8200;
+      border-color: #0072CE;
+      box-shadow: 0 0 5px #0072CE;
       outline: none;
     }
     .btn-epiq {
-      background-color: #FF8200;
+      background-color: #0072CE;
       color: #ffffff;
       font-weight: bold;
       border-radius: 0.5rem;
       transition: background 0.2s;
     }
     .btn-epiq:hover {
-      background-color: #e67300;
+      background-color: #005bb5;
     }
     #logBox {
       background-color: #0C2340;
-      color: #FF8200;
+      color: #0072CE;
       font-family: monospace;
       padding: 1rem;
       height: 400px;
       overflow-y: scroll;
       border-radius: 0.5rem;
       margin-top: 20px;
-      border: 1px solid #FF8200;
+      border: 1px solid #0072CE;
     }
     h2 {
-      color: #FF8200;
+      color: #0072CE;
       font-weight: bold;
       text-align: center;
       margin-bottom: 2rem;
+    }
+    .logo-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
+    }
+    .logo-container img {
+      max-height: 60px;
+      object-fit: contain;
     }
   </style>
 </head>
 <body>
   <div class="container py-5">
     <div class="card">
+      <!-- Logos -->
+      <div class="logo-container">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/7/7d/Epiq_Global_logo.svg" alt="Epiq Logo">
+        <img src="https://www.tenable.com/sites/drupal.dmz.tenablesecurity.com/files/2021-11/Tenable_logo_2021.svg" alt="Tenable Logo">
+      </div>
+
+      <!-- Heading -->
       <h2>Nessus Agent Deployment</h2>
+
+      <!-- Form -->
       <form id="deployForm" method="post">
         <div class="mb-3">
           <label class="form-label">Hosts (one per line)</label>
@@ -117,36 +137,10 @@
         <button type="submit" class="btn btn-epiq w-100">Deploy</button>
       </form>
 
+      <!-- Live logs -->
       <div id="logBox"></div>
     </div>
   </div>
 
   <script>
-    document.getElementById("deployForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const logBox = document.getElementById("logBox");
-      logBox.innerHTML = "Starting deployment...\n";
-      const formData = new FormData(this);
-      fetch("/", { method: "POST", body: formData })
-        .then(response => {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          function read() {
-            reader.read().then(({done, value}) => {
-              if (done) return;
-              const text = decoder.decode(value);
-              text.split("\n").forEach(line => {
-                if (line.startsWith("data:")) {
-                  logBox.innerText += line.replace("data:", "") + "\n";
-                  logBox.scrollTop = logBox.scrollHeight;
-                }
-              });
-              read();
-            });
-          }
-          read();
-        });
-    });
-  </script>
-</body>
-</html>
+    document.getElementById("deployForm").addEventLis

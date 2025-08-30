@@ -10,13 +10,11 @@
     mode: "{{ mode | default('cloud') }}"
     manager_host: "{{ manager_host | default('') }}"
     manager_port: "{{ manager_port | default('8834') }}"
-    ansible_become_method: "{{ escalate_method | default('sudo') }}"
+    ansible_become_method: "{{ ansible_become_method | default('sudo') }}"
     remove_rapid7: "{{ remove_rapid7 | default('false') }}"
 
   tasks:
-    # ------------------------
     # Optional Rapid7 removal
-    # ------------------------
     - name: Copy Rapid7 remover script
       ansible.builtin.copy:
         src: r7remover.sh
@@ -30,9 +28,7 @@
         executable: /bin/bash
       when: remove_rapid7 | bool
 
-    # ------------------------
-    # OS detection and package selection
-    # ------------------------
+    # OS detection
     - name: Determine package for Debian/Ubuntu
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
@@ -58,9 +54,7 @@
         msg: "Unsupported OS family/version: {{ ansible_facts['os_family'] }} {{ ansible_facts['distribution_major_version'] }}"
       when: nessus_pkg is not defined
 
-    # ------------------------
     # Nessus Agent deployment
-    # ------------------------
     - name: Check if agent is already linked
       ansible.builtin.shell: /opt/nessus_agent/sbin/nessuscli agent status
       register: agent_status

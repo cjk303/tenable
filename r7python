@@ -31,7 +31,7 @@ def index():
         account_key = request.form.get("predefined_account")
         use_predefined = account_key and account_key in PREDEFINED_ACCOUNTS
 
-        # Determine credentials
+        # Credentials
         if use_predefined:
             account = PREDEFINED_ACCOUNTS[account_key]
             username = account["username"]
@@ -53,7 +53,7 @@ def index():
         manager_host = request.form.get("manager_host", "")
         manager_port = request.form.get("manager_port", "8834")
         escalate_method = request.form.get("escalate_method", "sudo")
-        remove_rapid7 = "true" if request.form.get("remove_rapid7") else "false"
+        remove_rapid7 = request.form.get("remove_rapid7", "false")
 
         # --- Ephemeral Ansible Inventory ---
         inventory_content = "[agents]\n" + "\n".join(hosts) + "\n\n"
@@ -66,23 +66,21 @@ def index():
         inventory_content += f"mode={mode}\n"
         inventory_content += f"manager_host={manager_host}\n"
         inventory_content += f"manager_port={manager_port}\n"
-        inventory_content += f"escalate_method={escalate_method}\n"
+        inventory_content += f"ansible_become_method={escalate_method}\n"
         inventory_content += f"remove_rapid7={remove_rapid7}\n"
 
         tmp_inventory = tempfile.NamedTemporaryFile(delete=False)
         tmp_inventory.write(inventory_content.encode())
         tmp_inventory.close()
 
-        # Stream ansible-playbook output to browser
+        # Stream logs
         def stream_logs():
             cmd = ["ansible-playbook", "-i", tmp_inventory.name, "deploy_nessus_agent.yml"]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            try:
-                for line in iter(process.stdout.readline, b""):
-                    yield f"data:{line.decode()}\n"
-            finally:
-                process.stdout.close()
-                os.unlink(tmp_inventory.name)
+            for line in iter(process.stdout.readline, b""):
+                yield f"data:{line.decode()}\n"
+            process.stdout.close()
+            os.unlink(tmp_inventory.name)
 
         return Response(stream_logs(), mimetype='text/event-stream')
 

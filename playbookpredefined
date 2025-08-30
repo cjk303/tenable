@@ -8,6 +8,7 @@
 
   tasks:
 
+    # ---------------- OS validation ----------------
     - name: Fail if OS unsupported
       fail:
         msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
@@ -29,10 +30,9 @@
         - ansible_facts['distribution_major_version'] == "7"
 
     - name: Install RHEL 7 package
-      yum:
+      rpm:
         name: "/tmp/el7.rpm"
         state: present
-        disble_gpg_check: yes
       when:
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "7"
@@ -48,10 +48,9 @@
         - ansible_facts['distribution_major_version'] == "8"
 
     - name: Install RHEL 8 package
-      yum:
+      rpm:
         name: "/tmp/el8.rpm"
         state: present
-        disble_gpg_check: yes
       when:
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "8"
@@ -67,10 +66,9 @@
         - ansible_facts['distribution_major_version'] == "9"
 
     - name: Install RHEL 9 package
-      yum:
+      rpm:
         name: "/tmp/el9.rpm"
         state: present
-        disble_gpg_check: yes
       when:
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "9"

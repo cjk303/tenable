@@ -1,9 +1,35 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 import os
 import subprocess
 import yaml
+import json
+from cryptography.fernet import Fernet
 
 app = Flask(__name__)
+
+FERNET_KEY_FILE = "fernet.key"
+ACCOUNTS_FILE = "accounts.json"
+
+def load_fernet_key():
+    if not os.path.exists(FERNET_KEY_FILE):
+        key = Fernet.generate_key()
+        with open(FERNET_KEY_FILE, "wb") as f:
+            f.write(key)
+    else:
+        with open(FERNET_KEY_FILE, "rb") as f:
+            key = f.read()
+    return Fernet(key)
+
+def get_decrypted_account(account_name):
+    f = load_fernet_key()
+    with open(ACCOUNTS_FILE, "r") as fjson:
+        accounts = json.load(fjson)
+    if account_name not in accounts:
+        raise ValueError(f"Account {account_name} not found")
+    user = accounts[account_name]["username"]
+    password = f.decrypt(accounts[account_name]["password"].encode()).decode()
+    key = accounts[account_name]["key"]
+    return user, password, key
 
 @app.route("/", methods=["GET"])
 def index():
@@ -12,31 +38,34 @@ def index():
 @app.route("/deploy", methods=["POST"])
 def deploy():
     hosts = request.form.get("hosts")
-    activation_key = request.form.get("activation_key")
     mode = request.form.get("mode")
-    remove_rapid7 = request.form.get("remove_rapid7") == "true"
+    account_name = request.form.get("account")  # selected predefined account
 
-    # Write variables for playbook
+    # Get decrypted credentials
+    username, password, activation_key = get_decrypted_account(account_name)
+
+    # Write variables for Ansible
     vars_dict = {
-        "hosts_list": hosts.split(","),
+        "hosts_list": [h.strip() for h in hosts.split(",")],
+        "ansible_ssh_user": username,
+        "ansible_ssh_pass": password,
         "activation_key": activation_key,
-        "mode": mode,
-        "remove_rapid7": remove_rapid7
+        "mode": mode
     }
 
     with open("vars.yml", "w") as f:
         yaml.dump(vars_dict, f)
 
-    # Run ansible-playbook
     cmd = ["ansible-playbook", "-i", "localhost,", "deploy_nessus_agent.yml", "-e", "@vars.yml"]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
-    logs = ""
-    for line in process.stdout:
-        logs += line
+    def generate():
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in iter(process.stdout.readline, ''):
+            yield line
+        process.stdout.close()
+        process.wait()
 
-    process.wait()
-    return f"<pre>{logs}</pre>"
+    return Response(generate(), mimetype='text/plain')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8443)

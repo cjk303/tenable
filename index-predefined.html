@@ -38,16 +38,29 @@ h2 {color:#0072CE; font-weight:bold; text-align:center; margin-bottom:2rem;}
       </select>
     </div>
 
+    <div id="manual_credentials">
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" name="username" class="form-control">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input type="password" name="password" class="form-control">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Sudo Password</label>
+        <input type="password" name="sudo_password" class="form-control">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Activation Key</label>
+        <input type="text" name="activation_key" class="form-control">
+      </div>
+    </div>
+
     <div class="mb-3">
       <label class="form-label">Hosts (one per line)</label>
       <textarea name="hosts" class="form-control" rows="4" required></textarea>
     </div>
-
-    <!-- Hidden fields populated from predefined account -->
-    <input type="hidden" name="username" id="username">
-    <input type="hidden" name="password" id="password">
-    <input type="hidden" name="sudo_password" id="sudo_password">
-    <input type="hidden" name="activation_key" id="activation_key">
 
     <div class="mb-3">
       <label class="form-label">Groups</label>
@@ -90,19 +103,15 @@ h2 {color:#0072CE; font-weight:bold; text-align:center; margin-bottom:2rem;}
 
 <script>
 const predefinedAccounts = {{ predefined_accounts|tojson }};
-document.getElementById("predefined_account").addEventListener("change", function() {
-  const selected = predefinedAccounts[this.value];
-  if(selected){
-    document.getElementById("username").value = selected.username;
-    document.getElementById("password").value = selected.password;
-    document.getElementById("sudo_password").value = selected.sudo_password;
-    document.getElementById("activation_key").value = selected.activation_key;
-  } else {
-    document.getElementById("username").value="";
-    document.getElementById("password").value="";
-    document.getElementById("sudo_password").value="";
-    document.getElementById("activation_key").value="";
-  }
+const accountSelect = document.getElementById("predefined_account");
+const manualFields = document.getElementById("manual_credentials");
+
+accountSelect.addEventListener("change", function(){
+    if (this.value) {
+        manualFields.style.display = "none";
+    } else {
+        manualFields.style.display = "block";
+    }
 });
 
 document.getElementById("deployForm").addEventListener("submit", function(e){

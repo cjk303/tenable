@@ -1,82 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>Nessus Agent Deployment</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; background: #f7f7f7; }
-    .container { max-width: 800px; margin: auto; background: white; padding: 20px; margin-top: 40px; border-radius: 10px; box-shadow: 0px 2px 10px rgba(0,0,0,0.1);}
-    h2 { color: #5c2d91; }
-    label { display: block; margin-top: 15px; font-weight: bold; }
-    input, textarea, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; }
-    button { margin-top: 20px; padding: 10px 20px; background: #5c2d91; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    button:hover { background: #43206b; }
-    #logs { background: #111; color: #0f0; padding: 15px; border-radius: 8px; margin-top: 20px; max-height: 400px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; }
-    #status { margin-top: 15px; font-weight: bold; }
+    body { background-color: #0C2340; color: white; }
+    .card { background-color: #1C2E4A; border-radius: 1rem; }
+    .form-label { font-weight: bold; }
+    .btn-epiq { background-color: #FF8200; color: white; }
+    .btn-epiq:hover { background-color: #e67300; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Nessus Agent Deployment</h2>
-    <form id="deployForm">
-      <label>Activation Key</label>
-      <input type="text" name="activation_key" required>
-
-      <label>Groups (optional)</label>
-      <input type="text" name="groups">
-
-      <label>Mode</label>
-      <select name="mode">
-        <option value="cloud">Cloud</option>
-        <option value="manager">Manager</option>
-      </select>
-
-      <label>Manager Host (if mode=manager)</label>
-      <input type="text" name="manager_host">
-
-      <label>Manager Port (default 8834)</label>
-      <input type="text" name="manager_port" value="8834">
-
-      <label>Escalation Method</label>
-      <select name="escalate_method">
-        <option value="sudo">sudo</option>
-        <option value="dzdo">dzdo</option>
-      </select>
-
-      <label>Target Hosts (one per line, e.g. <code>server1 ansible_host=10.0.0.5 ansible_user=ec2-user</code>)</label>
-      <textarea name="hosts" rows="6" required></textarea>
-
-      <button type="submit">Deploy</button>
-    </form>
-
-    <div id="status"></div>
-    <div id="logs"></div>
+  <div class="container py-5">
+    <div class="card shadow p-4">
+      <h2 class="mb-4 text-center">Nessus Agent Deployment</h2>
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label">Hosts (one per line)</label>
+          <textarea name="hosts" class="form-control" rows="4" required></textarea>
+        </div>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" class="form-control" required>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control" required>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Activation Key</label>
+          <input type="text" name="activation_key" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Groups</label>
+          <input type="text" name="groups" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Mode</label>
+          <select name="mode" class="form-select">
+            <option value="cloud">Cloud</option>
+            <option value="manager">Manager</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Manager Host</label>
+            <input type="text" name="manager_host" class="form-control">
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Manager Port</label>
+            <input type="text" name="manager_port" value="8834" class="form-control">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Escalation Method</label>
+          <select name="escalate_method" class="form-select">
+            <option value="sudo">sudo</option>
+            <option value="dzdo">dzdo</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-epiq w-100">Deploy</button>
+      </form>
+    </div>
   </div>
-
-  <script>
-    const socket = io();
-    const form = document.getElementById("deployForm");
-    const logsDiv = document.getElementById("logs");
-    const statusDiv = document.getElementById("status");
-
-    form.addEventListener("submit", function(e) {
-      e.preventDefault();
-      logsDiv.innerHTML = "";
-      statusDiv.innerHTML = "⏳ Deployment in progress...";
-      const formData = new FormData(form);
-      const data = {};
-      formData.forEach((value, key) => data[key] = value);
-      socket.emit("run_playbook", data);
-    });
-
-    socket.on("log", function(msg) {
-      logsDiv.innerHTML += msg.line + "\n";
-      logsDiv.scrollTop = logsDiv.scrollHeight;
-    });
-
-    socket.on("status", function(msg) {
-      statusDiv.innerHTML = msg.msg;
-    });
-  </script>
 </body>
 </html>

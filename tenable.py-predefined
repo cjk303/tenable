@@ -24,29 +24,34 @@ def decrypt_password(enc_password):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        # Determine if a predefined account is selected
         account_key = request.form.get("predefined_account")
-        if account_key and account_key in PREDEFINED_ACCOUNTS:
+        use_predefined = account_key and account_key in PREDEFINED_ACCOUNTS
+
+        # Determine credentials
+        if use_predefined:
             account = PREDEFINED_ACCOUNTS[account_key]
             username = account["username"]
             password = decrypt_password(account["password"])
             sudo_password = decrypt_password(account["sudo_password"])
             activation_key = account["activation_key"]
         else:
-            username = request.form.get("username")
-            password = request.form.get("password")
-            sudo_password = request.form.get("sudo_password")
-            activation_key = request.form.get("activation_key")
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "").strip()
+            sudo_password = request.form.get("sudo_password", "").strip()
+            activation_key = request.form.get("activation_key", "").strip()
 
-        hosts = request.form.get("hosts").splitlines()
-        groups = request.form.get("groups")
-        mode = request.form.get("mode")
-        manager_host = request.form.get("manager_host")
-        manager_port = request.form.get("manager_port")
-        escalate_method = request.form.get("escalate_method")
+        if not username or not password or not activation_key:
+            return "Error: username, password, and activation key are required.", 400
 
-        # Create ephemeral Ansible inventory
-        inventory_content = "[agents]\n" + "\n".join(hosts) + "\n"
+        hosts = request.form.get("hosts", "").splitlines()
+        groups = request.form.get("groups", "")
+        mode = request.form.get("mode", "cloud")
+        manager_host = request.form.get("manager_host", "")
+        manager_port = request.form.get("manager_port", "8834")
+        escalate_method = request.form.get("escalate_method", "sudo")
+
+        # --- Ephemeral Inventory ---
+        inventory_content = "[agents]\n" + "\n".join(hosts) + "\n\n"
         inventory_content += "[agents:vars]\n"
         inventory_content += f"ansible_user={username}\n"
         inventory_content += f"ansible_password={password}\n"
@@ -62,7 +67,7 @@ def index():
         tmp_inventory.write(inventory_content.encode())
         tmp_inventory.close()
 
-        # Stream ansible-playbook output
+        # Stream ansible logs
         def stream_logs():
             cmd = ["ansible-playbook", "-i", tmp_inventory.name, "deploy_nessus_agent.yml"]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -74,6 +79,3 @@ def index():
         return Response(stream_logs(), mimetype='text/event-stream')
 
     return render_template("index.html", predefined_accounts=PREDEFINED_ACCOUNTS)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8443)

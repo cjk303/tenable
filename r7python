@@ -1,0 +1,42 @@
+from flask import Flask, render_template, request
+import os
+import subprocess
+import yaml
+
+app = Flask(__name__)
+
+@app.route("/", methods=["GET"])
+def index():
+    return render_template("index.html")
+
+@app.route("/deploy", methods=["POST"])
+def deploy():
+    hosts = request.form.get("hosts")
+    activation_key = request.form.get("activation_key")
+    mode = request.form.get("mode")
+    remove_rapid7 = request.form.get("remove_rapid7") == "true"
+
+    # Write variables for playbook
+    vars_dict = {
+        "hosts_list": hosts.split(","),
+        "activation_key": activation_key,
+        "mode": mode,
+        "remove_rapid7": remove_rapid7
+    }
+
+    with open("vars.yml", "w") as f:
+        yaml.dump(vars_dict, f)
+
+    # Run ansible-playbook
+    cmd = ["ansible-playbook", "-i", "localhost,", "deploy_nessus_agent.yml", "-e", "@vars.yml"]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    logs = ""
+    for line in process.stdout:
+        logs += line
+
+    process.wait()
+    return f"<pre>{logs}</pre>"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8443)

@@ -12,10 +12,11 @@
       set_fact:
         os_family: "{{ ansible_facts['os_family'] }}"
         os_major: "{{ ansible_facts['distribution_version'].split('.')[0] | int }}"
+        os_name: "{{ ansible_facts['distribution'] }}"
 
     - name: Fail if OS unsupported
       fail:
-        msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+        msg: "Unsupported OS {{ os_name }} {{ ansible_facts['distribution_version'] }}"
       when: os_family not in ['RedHat', 'Debian']
 
     - name: Remove existing Nessus token if force_relink
@@ -29,15 +30,21 @@
           {% if os_major == 7 %} NessusAgent-10.9.0-el7.x86_64.rpm
           {% elif os_major == 8 %} NessusAgent-10.9.0-el8.x86_64.rpm
           {% elif os_major == 9 %} NessusAgent-10.9.0-el9.x86_64.rpm
-          {% else %} none {% endif %}
+          {% else %} ''
+          {% endif %}
       when: os_family == "RedHat"
+
+    - name: Fail if RHEL version unsupported
+      fail:
+        msg: "Unsupported RHEL version {{ os_major }}. Only 7, 8, 9 are supported."
+      when: os_family == "RedHat" and rhel_package == ''
 
     - name: Upload the matching RHEL package
       copy:
         src: "{{ rhel_package }}"
         dest: "/tmp/{{ rhel_package }}"
         mode: '0755'
-      when: os_family == "RedHat" and rhel_package != "none"
+      when: os_family == "RedHat" and rhel_package != ''
 
     - name: Upload Debian/Ubuntu package
       copy:
@@ -50,7 +57,7 @@
       yum:
         name: "/tmp/{{ rhel_package }}"
         state: present
-      when: os_family == "RedHat" and rhel_package != "none"
+      when: os_family == "RedHat" and rhel_package != ''
 
     - name: Install Nessus Agent on Debian/Ubuntu
       apt:

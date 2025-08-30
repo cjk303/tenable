@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Nessus Agent Deployment</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; }
+    .container { max-width: 800px; margin: auto; background: white; padding: 20px; margin-top: 40px; border-radius: 10px; box-shadow: 0px 2px 10px rgba(0,0,0,0.1);}
+    h2 { color: #5c2d91; }
+    label { display: block; margin-top: 15px; font-weight: bold; }
+    input, textarea, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; }
+    button { margin-top: 20px; padding: 10px 20px; background: #5c2d91; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #43206b; }
+    #logs { background: #111; color: #0f0; padding: 15px; border-radius: 8px; margin-top: 20px; max-height: 400px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; }
+    #status { margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Nessus Agent Deployment</h2>
+    <form id="deployForm">
+      <label>Activation Key</label>
+      <input type="text" name="activation_key" required>
+
+      <label>Groups (optional)</label>
+      <input type="text" name="groups">
+
+      <label>Mode</label>
+      <select name="mode">
+        <option value="cloud">Cloud</option>
+        <option value="manager">Manager</option>
+      </select>
+
+      <label>Manager Host (if mode=manager)</label>
+      <input type="text" name="manager_host">
+
+      <label>Manager Port (default 8834)</label>
+      <input type="text" name="manager_port" value="8834">
+
+      <label>Escalation Method</label>
+      <select name="escalate_method">
+        <option value="sudo">sudo</option>
+        <option value="dzdo">dzdo</option>
+      </select>
+
+      <label>Target Hosts (one per line, e.g. <code>server1 ansible_host=10.0.0.5 ansible_user=ec2-user</code>)</label>
+      <textarea name="hosts" rows="6" required></textarea>
+
+      <button type="submit">Deploy</button>
+    </form>
+
+    <div id="status"></div>
+    <div id="logs"></div>
+  </div>
+
+  <script>
+    const socket = io();
+    const form = document.getElementById("deployForm");
+    const logsDiv = document.getElementById("logs");
+    const statusDiv = document.getElementById("status");
+
+    form.addEventListener("submit", function(e) {
+      e.preventDefault();
+      logsDiv.innerHTML = "";
+      statusDiv.innerHTML = "⏳ Deployment in progress...";
+      const formData = new FormData(form);
+      const data = {};
+      formData.forEach((value, key) => data[key] = value);
+      socket.emit("run_playbook", data);
+    });
+
+    socket.on("log", function(msg) {
+      logsDiv.innerHTML += msg.line + "\n";
+      logsDiv.scrollTop = logsDiv.scrollHeight;
+    });
+
+    socket.on("status", function(msg) {
+      statusDiv.innerHTML = msg.msg;
+    });
+  </script>
+</body>
+</html>

@@ -75,6 +75,4 @@
       shell: >
         /opt/nessus_agent/sbin/nessuscli agent link
         --key={{ activation_key }}
-        {% if mode == "cloud" %} --cloud {% else %} --manager-host={{ manager_host }} --manager-port={{ manager_port }} {% endif %}
-      args:
-        creates: "/opt/nessus_agent/.nessus/agent.key"
+        {% if mode == "cl

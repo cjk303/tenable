@@ -1,0 +1,58 @@
+---
+- name: Deploy Nessus Agent
+  hosts: agents
+  gather_facts: yes
+  become: yes
+  vars:
+    force_relink: true
+
+  tasks:
+
+    - name: Determine OS family and version
+      set_fact:
+        is_redhat: "{{ ansible_facts['os_family'] == 'RedHat' }}"
+        is_debian: "{{ ansible_facts['os_family'] == 'Debian' }}"
+        os_version: "{{ ansible_facts['distribution_version'] }}"
+
+    - name: Fail if OS unsupported
+      fail:
+        msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ os_version }}"
+      when: not (is_redhat or is_debian)
+
+    - name: Remove existing Nessus token if force_relink
+      shell: "/opt/nessus_agent/sbin/nessuscli agent unlink"
+      ignore_errors: yes
+      when: force_relink
+
+    - name: Upload appropriate Nessus package
+      copy:
+        src: "{{ item }}"
+        dest: "/tmp/"
+        mode: '0755'
+      with_items:
+        - "NessusAgent-10.9.0-el7.x86_64.rpm"
+        - "NessusAgent-10.9.0-el8.x86_64.rpm"
+        - "NessusAgent-10.9.0-el9.x86_64.rpm"
+        - "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+      when: >
+        (is_redhat and (
+          (os_version|int == 7 and item.endswith("el7.x86_64.rpm")) or
+          (os_version|int == 8 and item.endswith("el8.x86_64.rpm")) or
+          (os_version|int == 9 and item.endswith("el9.x86_64.rpm"))
+        )) or
+        (is_debian and item.endswith("ubuntu1604_amd64.deb"))
+
+    - name: Install Nessus Agent on RedHat
+      yum:
+        name: "/tmp/{{ item }}"
+        state: present
+      with_items:
+        - "NessusAgent-10.9.0-el7.x86_64.rpm"
+        - "NessusAgent-10.9.0-el8.x86_64.rpm"
+        - "NessusAgent-10.9.0-el9.x86_64.rpm"
+      when: is_redhat
+
+    - name: Install Nessus Agent on Debian
+      apt:
+        deb: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        state: present

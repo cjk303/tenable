@@ -4,17 +4,64 @@
     <meta charset="UTF-8">
     <title>Deploy Nessus Agent</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #e6f0fa; color: #003366; padding: 20px; }
-        label { display: block; margin-top: 10px; font-weight: bold; }
-        input, select { margin-bottom: 10px; width: 300px; padding: 5px; }
-        button { background-color: #003366; color: white; padding: 10px 20px; border: none; cursor: pointer; }
-        button:hover { background-color: #0059b3; }
-        .checkbox { margin-top: 10px; }
+        /* Epiq bright color scheme */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e6f0fa; /* light blue background */
+            color: #003366; /* Epiq dark blue text */
+            padding: 30px;
+        }
+
+        h1 {
+            color: #003366;
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        input[type="text"], select {
+            margin-top: 5px;
+            margin-bottom: 15px;
+            width: 300px;
+            padding: 7px;
+            border: 1px solid #003366;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #003366;
+            color: white;
+            padding: 10px 25px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0059b3;
+        }
+
+        .checkbox {
+            margin-top: 10px;
+        }
+
+        .logo {
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
-    <img src="/static/epiq-vector-logo.png" alt="Epiq Logo" height="50">
+    <!-- Epiq logo -->
+    <div class="logo">
+        <img src="/static/epiq-vector-logo.png" alt="Epiq Logo" height="60">
+    </div>
+
     <h1>Deploy Nessus Agent</h1>
+
     <form method="POST" action="/deploy">
         <label for="hosts">Target Hosts (comma separated):</label>
         <input type="text" id="hosts" name="hosts" required>

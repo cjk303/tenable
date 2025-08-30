@@ -7,7 +7,6 @@
     - vars.yml
 
   tasks:
-
     - name: Fail if OS unsupported
       fail:
         msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
@@ -17,7 +16,7 @@
       shell: "/opt/nessus_agent/sbin/nessuscli agent unlink"
       ignore_errors: yes
 
-    # ---------------- RHEL 7 ----------------
+    # ---------------- RHEL packages ----------------
     - name: Upload RHEL 7 package
       copy:
         src: "el7.rpm"
@@ -29,7 +28,6 @@
 
     - name: Install RHEL 7 package
       shell: "yum -y localinstall /tmp/el7.rpm"
-      become: yes
       register: rhel7_install
       async: 0
       poll: 1
@@ -44,7 +42,7 @@
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "7"
 
-    # ---------------- RHEL 8 ----------------
+    # Repeat similar tasks for RHEL 8/9
     - name: Upload RHEL 8 package
       copy:
         src: "el8.rpm"
@@ -56,7 +54,6 @@
 
     - name: Install RHEL 8 package
       shell: "dnf -y localinstall /tmp/el8.rpm"
-      become: yes
       register: rhel8_install
       async: 0
       poll: 1
@@ -71,7 +68,6 @@
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "8"
 
-    # ---------------- RHEL 9 ----------------
     - name: Upload RHEL 9 package
       copy:
         src: "el9.rpm"
@@ -83,7 +79,6 @@
 
     - name: Install RHEL 9 package
       shell: "dnf -y localinstall /tmp/el9.rpm"
-      become: yes
       register: rhel9_install
       async: 0
       poll: 1

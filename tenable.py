@@ -1,80 +1,72 @@
-from flask import Flask, render_template, request
-from flask_socketio import SocketIO, emit
+from flask import Flask, render_template, request, Response
 import subprocess
 import tempfile
 import os
-import shlex
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app)
 
 PLAYBOOK_FILE = "deploy_nessus_agent.yml"
 
+
 @app.route("/", methods=["GET", "POST"])
 def index():
+    if request.method == "POST":
+        hosts_input = request.form["hosts"].strip()
+        username = request.form["username"].strip()
+        password = request.form["password"].strip()
+        activation_key = request.form["activation_key"].strip()
+        groups = request.form["groups"].strip()
+        mode = request.form["mode"]
+        manager_host = request.form["manager_host"].strip()
+        manager_port = request.form["manager_port"].strip()
+        escalate_method = request.form["escalate_method"]
+
+        # Create ephemeral inventory
+        with tempfile.NamedTemporaryFile("w", delete=False) as tmp_inv:
+            tmp_inv.write("[agents]\n")
+            for line in hosts_input.splitlines():
+                line = line.strip()
+                if line:
+                    tmp_inv.write(f"{line} ansible_user={username}\n")
+            tmp_inv_name = tmp_inv.name
+
+        # Build ansible-playbook command
+        cmd = [
+            "ansible-playbook",
+            "-i", tmp_inv_name,
+            PLAYBOOK_FILE,
+            "-e", f"activation_key={activation_key}",
+            "-e", f"groups={groups}",
+            "-e", f"mode={mode}",
+            "-e", f"manager_host={manager_host}",
+            "-e", f"manager_port={manager_port}",
+            "-e", f"escalate_method={escalate_method}",
+            "-e", f"ansible_user={username}",
+            "-e", f"ansible_password={password}",
+            "-e", f"ansible_become_password={password}"
+        ]
+
+        def generate():
+            try:
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                )
+                for line in iter(process.stdout.readline, ""):
+                    yield line
+                process.stdout.close()
+                process.wait()
+            finally:
+                if os.path.exists(tmp_inv_name):
+                    os.unlink(tmp_inv_name)
+
+        return Response(generate(), mimetype="text/plain")
+
     return render_template("index.html")
 
-@socketio.on("run_playbook")
-def run_playbook(data):
-    activation_key = data.get("activation_key", "").strip()
-    groups = data.get("groups", "").strip()
-    mode = data.get("mode", "cloud")
-    manager_host = data.get("manager_host", "").strip()
-    manager_port = data.get("manager_port", "8834").strip()
-    escalate_method = data.get("escalate_method", "sudo")
-    hosts_text = data.get("hosts", "").strip()
-
-    # Build temporary inventory file
-    tmp_inv = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".ini")
-    tmp_inv.write("[agents]\n")
-    for line in hosts_text.splitlines():
-        if line.strip():
-            tmp_inv.write(line.strip() + "\n")
-    tmp_inv.close()
-
-    # Build extra vars
-    extra_vars = {
-        "activation_key": activation_key,
-        "groups": groups,
-        "mode": mode,
-        "manager_host": manager_host,
-        "manager_port": manager_port,
-        "escalate_method": escalate_method,
-    }
-
-    extra_vars_args = []
-    for k, v in extra_vars.items():
-        if v:
-            extra_vars_args.extend(["-e", f"{k}={shlex.quote(v)}"])
-
-    cmd = ["ansible-playbook", "-i", tmp_inv.name, PLAYBOOK_FILE] + extra_vars_args
-    emit("log", {"line": f"▶ Running: {' '.join(cmd)}"})
-
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-        )
-
-        for line in proc.stdout:
-            emit("log", {"line": line.rstrip()})
-            socketio.sleep(0.01)  # allow async flush
-
-        proc.wait()
-        if proc.returncode == 0:
-            emit("status", {"ok": True, "msg": "✅ Deployment completed successfully"})
-        else:
-            emit("status", {"ok": False, "msg": f"❌ Deployment failed (exit code {proc.returncode})"})
-
-    except Exception as e:
-        emit("status", {"ok": False, "msg": f"Error: {e}"})
-    finally:
-        os.unlink(tmp_inv.name)
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=8443, debug=True)
+    # Runs on all interfaces at port 8443
+    app.run(host="0.0.0.0", port=8443, debug=True)

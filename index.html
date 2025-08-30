@@ -143,4 +143,31 @@
   </div>
 
   <script>
-    document.getElementById("deployForm").addEventLis
+    document.getElementById("deployForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const logBox = document.getElementById("logBox");
+      logBox.innerHTML = "Starting deployment...\n";
+      const formData = new FormData(this);
+      fetch("/", { method: "POST", body: formData })
+        .then(response => {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          function read() {
+            reader.read().then(({done, value}) => {
+              if (done) return;
+              const text = decoder.decode(value);
+              text.split("\n").forEach(line => {
+                if (line.startsWith("data:")) {
+                  logBox.innerText += line.replace("data:", "") + "\n";
+                  logBox.scrollTop = logBox.scrollHeight;
+                }
+              });
+              read();
+            });
+          }
+          read();
+        });
+    });
+  </script>
+</body>
+</html>

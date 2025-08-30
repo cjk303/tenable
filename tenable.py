@@ -14,6 +14,7 @@ def index():
         hosts_input = request.form["hosts"].strip()
         username = request.form["username"].strip()
         password = request.form["password"].strip()
+        sudo_password = request.form["sudo_password"].strip()
         activation_key = request.form["activation_key"].strip()
         groups = request.form["groups"].strip()
         mode = request.form["mode"]
@@ -43,7 +44,7 @@ def index():
             "-e", f"escalate_method={escalate_method}",
             "-e", f"ansible_user={username}",
             "-e", f"ansible_password={password}",
-            "-e", f"ansible_become_password={password}"
+            "-e", f"ansible_become_password={sudo_password}"
         ]
 
         def generate():
@@ -53,20 +54,21 @@ def index():
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     universal_newlines=True,
+                    bufsize=1
                 )
                 for line in iter(process.stdout.readline, ""):
-                    yield line
+                    safe_line = line.replace(password, "******").replace(sudo_password, "******")
+                    yield f"data:{safe_line}\n\n"
                 process.stdout.close()
                 process.wait()
             finally:
                 if os.path.exists(tmp_inv_name):
                     os.unlink(tmp_inv_name)
 
-        return Response(generate(), mimetype="text/plain")
+        return Response(generate(), mimetype="text/event-stream")
 
     return render_template("index.html")
 
 
 if __name__ == "__main__":
-    # Runs on all interfaces at port 8443
     app.run(host="0.0.0.0", port=8443, debug=True)

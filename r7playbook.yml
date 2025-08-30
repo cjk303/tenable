@@ -1,5 +1,5 @@
 ---
-- name: Deploy Nessus Agent with re-onboarding
+- name: Deploy Nessus Agent with optional Rapid7 removal
   hosts: agents
   gather_facts: yes
   become: true
@@ -10,15 +10,19 @@
     manager_host: "{{ manager_host | default('') }}"
     manager_port: "{{ manager_port | default('8834') }}"
     escalate_method: "{{ escalate_method | default('sudo') }}"
-    ansible_user: "{{ ansible_user | default('') }}"
-    ansible_password: "{{ ansible_password | default('') }}"
-    ansible_become_password: "{{ ansible_become_password | default(ansible_password) }}"
     remove_rapid7: "{{ remove_rapid7 | default('false') }}"
 
   tasks:
-    - name: Upload Rapid7 remover script
+    - name: Set become method dynamically
+      set_fact:
+        ansible_become_method: "{{ escalate_method }}"
+
+    # ------------------------
+    # Optional Rapid7 Removal
+    # ------------------------
+    - name: Copy Rapid7 remover script
       ansible.builtin.copy:
-        src: "r7remover.sh"
+        src: r7remover.sh
         dest: /tmp/r7remover.sh
         mode: "0755"
       when: remove_rapid7 | bool
@@ -27,10 +31,9 @@
       ansible.builtin.shell: /tmp/r7remover.sh
       when: remove_rapid7 | bool
 
-    - name: Set become method dynamically
-      set_fact:
-        ansible_become_method: "{{ escalate_method }}"
-
+    # ------------------------
+    # Nessus Agent Deployment
+    # ------------------------
     - name: Determine package for Debian/Ubuntu
       set_fact:
         nessus_pkg: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"

@@ -8,51 +8,66 @@
 
   tasks:
 
-    - name: Determine OS family and version
+    - name: Determine OS family and major version
       set_fact:
-        is_redhat: "{{ ansible_facts['os_family'] == 'RedHat' }}"
-        is_debian: "{{ ansible_facts['os_family'] == 'Debian' }}"
-        os_version: "{{ ansible_facts['distribution_version'] }}"
+        os_family: "{{ ansible_facts['os_family'] }}"
+        os_major: "{{ ansible_facts['distribution_version'].split('.')[0] | int }}"
 
     - name: Fail if OS unsupported
       fail:
-        msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ os_version }}"
-      when: not (is_redhat or is_debian)
+        msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+      when: os_family not in ['RedHat', 'Debian']
 
     - name: Remove existing Nessus token if force_relink
       shell: "/opt/nessus_agent/sbin/nessuscli agent unlink"
       ignore_errors: yes
       when: force_relink
 
-    - name: Upload appropriate Nessus package
+    - name: Set appropriate RHEL package filename
+      set_fact:
+        rhel_package: >-
+          {% if os_major == 7 %} NessusAgent-10.9.0-el7.x86_64.rpm
+          {% elif os_major == 8 %} NessusAgent-10.9.0-el8.x86_64.rpm
+          {% elif os_major == 9 %} NessusAgent-10.9.0-el9.x86_64.rpm
+          {% else %} none {% endif %}
+      when: os_family == "RedHat"
+
+    - name: Upload the matching RHEL package
       copy:
-        src: "{{ item }}"
-        dest: "/tmp/"
+        src: "{{ rhel_package }}"
+        dest: "/tmp/{{ rhel_package }}"
         mode: '0755'
-      with_items:
-        - "NessusAgent-10.9.0-el7.x86_64.rpm"
-        - "NessusAgent-10.9.0-el8.x86_64.rpm"
-        - "NessusAgent-10.9.0-el9.x86_64.rpm"
-        - "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
-      when: >
-        (is_redhat and (
-          (os_version|int == 7 and item.endswith("el7.x86_64.rpm")) or
-          (os_version|int == 8 and item.endswith("el8.x86_64.rpm")) or
-          (os_version|int == 9 and item.endswith("el9.x86_64.rpm"))
-        )) or
-        (is_debian and item.endswith("ubuntu1604_amd64.deb"))
+      when: os_family == "RedHat" and rhel_package != "none"
+
+    - name: Upload Debian/Ubuntu package
+      copy:
+        src: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        dest: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        mode: '0755'
+      when: os_family == "Debian"
 
     - name: Install Nessus Agent on RedHat
       yum:
-        name: "/tmp/{{ item }}"
+        name: "/tmp/{{ rhel_package }}"
         state: present
-      with_items:
-        - "NessusAgent-10.9.0-el7.x86_64.rpm"
-        - "NessusAgent-10.9.0-el8.x86_64.rpm"
-        - "NessusAgent-10.9.0-el9.x86_64.rpm"
-      when: is_redhat
+      when: os_family == "RedHat" and rhel_package != "none"
 
-    - name: Install Nessus Agent on Debian
+    - name: Install Nessus Agent on Debian/Ubuntu
       apt:
         deb: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         state: present
+      when: os_family == "Debian"
+
+    - name: Enable and start Nessus Agent
+      service:
+        name: nessusagent
+        state: started
+        enabled: yes
+
+    - name: Link Nessus Agent
+      shell: >
+        /opt/nessus_agent/sbin/nessuscli agent link
+        --key={{ activation_key }}
+        {% if mode == "cloud" %} --cloud {% else %} --manager-host={{ manager_host }} --manager-port={{ manager_port }} {% endif %}
+      args:
+        creates: "/opt/nessus_agent/.nessus/agent.key"

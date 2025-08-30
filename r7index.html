@@ -4,58 +4,17 @@
     <meta charset="UTF-8">
     <title>Deploy Nessus Agent</title>
     <style>
-        /* Epiq bright color scheme */
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #e6f0fa; /* light blue background */
-            color: #003366; /* Epiq dark blue text */
-            padding: 30px;
-        }
-
-        h1 {
-            color: #003366;
-        }
-
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-
-        input[type="text"], select {
-            margin-top: 5px;
-            margin-bottom: 15px;
-            width: 300px;
-            padding: 7px;
-            border: 1px solid #003366;
-            border-radius: 4px;
-        }
-
-        button {
-            background-color: #003366;
-            color: white;
-            padding: 10px 25px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        button:hover {
-            background-color: #0059b3;
-        }
-
-        .checkbox {
-            margin-top: 10px;
-        }
-
-        .logo {
-            margin-bottom: 20px;
-        }
+        body { font-family: Arial, sans-serif; background-color: #e6f0fa; color: #003366; padding: 30px; }
+        h1 { color: #003366; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input[type="text"], select { margin-top: 5px; margin-bottom: 15px; width: 300px; padding: 7px; border: 1px solid #003366; border-radius: 4px; }
+        button { background-color: #003366; color: white; padding: 10px 25px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0059b3; }
+        .logo { margin-bottom: 20px; }
+        .checkbox { margin-top: 10px; }
     </style>
 </head>
 <body>
-    <!-- Epiq logo -->
     <div class="logo">
         <img src="/static/epiq-vector-logo.png" alt="Epiq Logo" height="60">
     </div>
@@ -66,8 +25,15 @@
         <label for="hosts">Target Hosts (comma separated):</label>
         <input type="text" id="hosts" name="hosts" required>
 
-        <label for="activation_key">Activation Key:</label>
-        <input type="text" id="activation_key" name="activation_key" required>
+        <label for="account">Select Predefined Account:</label>
+        <select id="account" name="account" required>
+            {% for acc in accounts %}
+            <option value="{{ acc }}">{{ acc }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="activation_key">Activation Key (optional override):</label>
+        <input type="text" id="activation_key" name="activation_key">
 
         <label for="mode">Mode:</label>
         <select id="mode" name="mode">

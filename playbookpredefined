@@ -8,84 +8,85 @@
 
   tasks:
 
-    - name: Determine OS family and major version
-      set_fact:
-        os_family: "{{ ansible_facts['os_family'] }}"
-        os_major: "{{ ansible_facts['distribution_version'].split('.')[0] | int }}"
-
-    - name: Debug OS info
-      debug:
-        msg:
-          - "OS family: {{ os_family }}"
-          - "OS major: {{ os_major }}"
-          - "Distribution: {{ ansible_facts['distribution'] }}"
-          - "Version: {{ ansible_facts['distribution_version'] }}"
-
     - name: Fail if OS unsupported
       fail:
         msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
-      when: os_family not in ['RedHat', 'Debian']
+      when: ansible_facts['distribution'] not in ['RedHat', 'Ubuntu', 'Debian']
 
     - name: Remove existing Nessus token if force_relink
       shell: "/opt/nessus_agent/sbin/nessuscli agent unlink"
       ignore_errors: yes
       when: force_relink
 
-    # ---------------- RHEL Tasks ----------------
+    # ---------------- RHEL 7 ----------------
     - name: Upload RHEL 7 package
       copy:
         src: "el7.rpm"
         dest: "/tmp/el7.rpm"
         mode: '0755'
-      when: os_family | lower == "redhat" and os_major == 7
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "7"
 
     - name: Install RHEL 7 package
       yum:
         name: "/tmp/el7.rpm"
         state: present
-      when: os_family | lower == "redhat" and os_major == 7
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "7"
 
+    # ---------------- RHEL 8 ----------------
     - name: Upload RHEL 8 package
       copy:
         src: "el8.rpm"
         dest: "/tmp/el8.rpm"
         mode: '0755'
-      when: os_family | lower == "redhat" and os_major == 8
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "8"
 
     - name: Install RHEL 8 package
       yum:
         name: "/tmp/el8.rpm"
         state: present
-      when: os_family | lower == "redhat" and os_major == 8
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "8"
 
+    # ---------------- RHEL 9 ----------------
     - name: Upload RHEL 9 package
       copy:
         src: "el9.rpm"
         dest: "/tmp/el9.rpm"
         mode: '0755'
-      when: os_family | lower == "redhat" and os_major == 9
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "9"
 
     - name: Install RHEL 9 package
       yum:
         name: "/tmp/el9.rpm"
         state: present
-      when: os_family | lower == "redhat" and os_major == 9
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "9"
 
-    # ---------------- Debian/Ubuntu Tasks ----------------
+    # ---------------- Debian/Ubuntu ----------------
     - name: Upload Debian/Ubuntu package
       copy:
         src: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         dest: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         mode: '0755'
-      when: os_family == "Debian"
+      when: ansible_facts['distribution'] in ['Ubuntu', 'Debian']
 
     - name: Install Debian/Ubuntu package
       apt:
         deb: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
         state: present
-      when: os_family == "Debian"
+      when: ansible_facts['distribution'] in ['Ubuntu', 'Debian']
 
-    # ---------------- Enable and link ----------------
+    # ---------------- Start & Link Nessus Agent ----------------
     - name: Enable and start Nessus Agent
       service:
         name: nessusagent

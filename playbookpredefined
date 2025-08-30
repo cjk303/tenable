@@ -29,10 +29,9 @@
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "7"
 
-    - name: Install RHEL 7 package
-      rpm:
-        name: "/tmp/el7.rpm"
-        state: present
+    - name: Install RHEL 7 package via yum
+      command: yum -y localinstall /tmp/el7.rpm
+      become: yes
       when:
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "7"
@@ -47,10 +46,9 @@
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "8"
 
-    - name: Install RHEL 8 package
-      rpm:
-        name: "/tmp/el8.rpm"
-        state: present
+    - name: Install RHEL 8 package via dnf
+      command: dnf -y localinstall /tmp/el8.rpm
+      become: yes
       when:
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "8"
@@ -65,10 +63,9 @@
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "9"
 
-    - name: Install RHEL 9 package
-      rpm:
-        name: "/tmp/el9.rpm"
-        state: present
+    - name: Install RHEL 9 package via dnf
+      command: dnf -y localinstall /tmp/el9.rpm
+      become: yes
       when:
         - ansible_facts['distribution'] == "RedHat"
         - ansible_facts['distribution_major_version'] == "9"

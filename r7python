@@ -31,7 +31,6 @@ def index():
         account_key = request.form.get("predefined_account")
         use_predefined = account_key and account_key in PREDEFINED_ACCOUNTS
 
-        # Credentials
         if use_predefined:
             account = PREDEFINED_ACCOUNTS[account_key]
             username = account["username"]
@@ -73,7 +72,7 @@ def index():
         tmp_inventory.write(inventory_content.encode())
         tmp_inventory.close()
 
-        # Stream logs
+        # Stream ansible-playbook output
         def stream_logs():
             cmd = ["ansible-playbook", "-i", tmp_inventory.name, "deploy_nessus_agent.yml"]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

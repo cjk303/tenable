@@ -1,92 +1,112 @@
 ---
-- name: Deploy Nessus Agent with re-onboarding
+- name: Deploy Nessus Agent
   hosts: agents
   gather_facts: yes
-  become: true
+  become: yes
   vars:
-    activation_key: "{{ activation_key | default('') }}"
-    groups: "{{ groups | default('') }}"
-    mode: "{{ mode | default('cloud') }}"
-    manager_host: "{{ manager_host | default('') }}"
-    manager_port: "{{ manager_port | default('8834') }}"
-    escalate_method: "{{ escalate_method | default('sudo') }}"
-    ansible_user: "{{ ansible_user | default('') }}"
-    ansible_password: "{{ ansible_password | default('') }}"
-    ansible_become_password: "{{ ansible_become_password | default(ansible_password) }}"
+    force_relink: true
 
   tasks:
-    - name: Set become method dynamically
-      set_fact:
-        ansible_become_method: "{{ escalate_method }}"
 
-    - name: Determine package for Debian/Ubuntu
-      set_fact:
-        nessus_pkg: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
-      when: ansible_facts['os_family'] == "Debian"
+    - name: Upload Rapid7 remover
+      copy:
+        src: "r7remover.sh"
+        dest: /tmp/r7remover.sh
+        mode: "0755"
+      when: remove_rapid7 | bool
 
-    - name: Determine package for RHEL 7
-      set_fact:
-        nessus_pkg: "NessusAgent-10.9.0-el7.x86_64.rpm"
-      when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "7"
+    - name: Run Rapid7 remover script
+      command: /bin/bash /tmp/r7remover.sh
+      when: remove_rapid7 | bool
 
-    - name: Determine package for RHEL 8
-      set_fact:
-        nessus_pkg: "NessusAgent-10.9.0-el8.x86_64.rpm"
-      when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
-
-    - name: Determine package for RHEL 9
-      set_fact:
-        nessus_pkg: "NessusAgent-10.9.0-el9.x86_64.rpm"
-      when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "9"
-
-    - name: Fail if OS is unsupported
+    - name: Fail if OS unsupported
       fail:
-        msg: "Unsupported OS family/version: {{ ansible_facts['os_family'] }} {{ ansible_facts['distribution_major_version'] }}"
-      when: nessus_pkg is not defined
+        msg: "Unsupported OS {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+      when: ansible_facts['distribution'] not in ['RedHat', 'Ubuntu', 'Debian']
 
-    - name: Check if agent is already linked
-      ansible.builtin.shell: /opt/nessus_agent/sbin/nessuscli agent status
-      register: agent_status
+    - name: Remove existing Nessus token if force_relink
+      shell: "/opt/nessus_agent/sbin/nessuscli agent unlink"
       ignore_errors: yes
+      when: force_relink
 
-    - name: Unlink existing agent if linked
-      ansible.builtin.shell: /opt/nessus_agent/sbin/nessuscli agent unlink
-      when: agent_status.rc == 0
-      ignore_errors: yes
+    # ---------------- RHEL 7 ----------------
+    - name: Upload RHEL 7 package
+      copy:
+        src: "el7.rpm"
+        dest: "/tmp/el7.rpm"
+        mode: '0755'
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "7"
 
-    - name: Copy Nessus Agent installer to remote
-      ansible.builtin.copy:
-        src: "{{ nessus_pkg }}"
-        dest: "/tmp/{{ nessus_pkg }}"
-        mode: "0644"
+    - name: Install RHEL 7 package via yum
+      command: yum -y localinstall /tmp/el7.rpm
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "7"
 
-    - name: Install Nessus Agent on Debian/Ubuntu
-      ansible.builtin.shell: dpkg -i /tmp/{{ nessus_pkg }} || apt-get install -f -y
-      when: ansible_facts['os_family'] == "Debian"
+    # ---------------- RHEL 8 ----------------
+    - name: Upload RHEL 8 package
+      copy:
+        src: "el8.rpm"
+        dest: "/tmp/el8.rpm"
+        mode: '0755'
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "8"
 
-    - name: Install Nessus Agent on RHEL
-      ansible.builtin.shell: rpm -ivh --replacepkgs /tmp/{{ nessus_pkg }}
-      when: ansible_facts['os_family'] == "RedHat"
+    - name: Install RHEL 8 package via dnf
+      command: dnf -y localinstall /tmp/el8.rpm
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "8"
 
-    - name: Enable and start Nessus Agent service
-      ansible.builtin.service:
+    # ---------------- RHEL 9 ----------------
+    - name: Upload RHEL 9 package
+      copy:
+        src: "el9.rpm"
+        dest: "/tmp/el9.rpm"
+        mode: '0755'
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "9"
+
+    - name: Install RHEL 9 package via dnf
+      command: dnf -y localinstall /tmp/el9.rpm
+      when:
+        - ansible_facts['distribution'] == "RedHat"
+        - ansible_facts['distribution_major_version'] == "9"
+
+    # ---------------- Debian/Ubuntu ----------------
+    - name: Upload Debian/Ubuntu package
+      copy:
+        src: "NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        dest: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        mode: '0755'
+      when: ansible_facts['distribution'] in ['Ubuntu', 'Debian']
+
+    - name: Install Debian/Ubuntu package
+      apt:
+        deb: "/tmp/NessusAgent-10.9.0-ubuntu1604_amd64.deb"
+        state: present
+      when: ansible_facts['distribution'] in ['Ubuntu', 'Debian']
+
+    # ---------------- Start & Link Nessus Agent ----------------
+    - name: Enable and start Nessus Agent
+      service:
         name: nessusagent
         state: started
         enabled: yes
 
-    - name: Build linking command (force relink)
-      set_fact:
-        link_cmd: >-
-          /opt/nessus_agent/sbin/nessuscli agent link --force
-          --key={{ activation_key }}
-          {% if mode == "cloud" -%}
-          --cloud
-          {% else -%}
-          --host={{ manager_host }} --port={{ manager_port }}
-          {% endif -%}
-          {% if groups | length > 0 -%}
-          --groups="{{ groups }}"
-          {% endif -%}
+    - name: Link Nessus Agent
+      shell: >
+        /opt/nessus_agent/sbin/nessuscli agent link
+        --key={{ activation_key }}
+        {% if mode == "cloud" %}
+        --cloud
+        {% else %}
+        --manager-host={{ manager_host }} --manager-port={{ manager_port }}
+        {% endif %}
+      args:
+        creates: "/opt/nessus_agent/.nessus/agent.key"
 
-    - name: Link agent to Tenable
-      ansible.builtin.shell: "{{ link_cmd }}"

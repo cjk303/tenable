@@ -12,7 +12,7 @@ if not os.path.isfile(PREDEFINED_FILE):
 with open(PREDEFINED_FILE) as f:
     PREDEFINED_ACCOUNTS = json.load(f)
 
-# Load Fernet key
+# Load Fernet key from local file
 KEY_FILE = "fernet.key"
 if not os.path.isfile(KEY_FILE):
     raise FileNotFoundError(f"Fernet key file '{KEY_FILE}' not found. Generate it first.")
@@ -31,6 +31,7 @@ def index():
         account_key = request.form.get("predefined_account")
         use_predefined = account_key and account_key in PREDEFINED_ACCOUNTS
 
+        # Determine credentials
         if use_predefined:
             account = PREDEFINED_ACCOUNTS[account_key]
             username = account["username"]
@@ -65,14 +66,14 @@ def index():
         inventory_content += f"mode={mode}\n"
         inventory_content += f"manager_host={manager_host}\n"
         inventory_content += f"manager_port={manager_port}\n"
-        inventory_content += f"ansible_become_method={escalate_method}\n"
+        inventory_content += f"escalate_method={escalate_method}\n"
         inventory_content += f"remove_rapid7={remove_rapid7}\n"
 
         tmp_inventory = tempfile.NamedTemporaryFile(delete=False)
         tmp_inventory.write(inventory_content.encode())
         tmp_inventory.close()
 
-        # Stream ansible-playbook output
+        # Stream ansible-playbook output to browser
         def stream_logs():
             cmd = ["ansible-playbook", "-i", tmp_inventory.name, "deploy_nessus_agent.yml"]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

@@ -53,6 +53,7 @@ def index():
         manager_host = request.form.get("manager_host", "")
         manager_port = request.form.get("manager_port", "8834")
         escalate_method = request.form.get("escalate_method", "sudo")
+        remove_rapid7 = request.form.get("remove_rapid7", "false")
 
         # --- Ephemeral Ansible Inventory ---
         inventory_content = "[agents]\n" + "\n".join(hosts) + "\n\n"
@@ -66,6 +67,7 @@ def index():
         inventory_content += f"manager_host={manager_host}\n"
         inventory_content += f"manager_port={manager_port}\n"
         inventory_content += f"escalate_method={escalate_method}\n"
+        inventory_content += f"remove_rapid7={remove_rapid7}\n"
 
         tmp_inventory = tempfile.NamedTemporaryFile(delete=False)
         tmp_inventory.write(inventory_content.encode())
